@@ -1,0 +1,36 @@
+# ---- 运行时数据：绝对不要上传 ----
+# data/ 里有 Bangumi Access Token、qBittorrent 密码、订阅列表、日志、缓存
+data/
+
+# ---- 测试/开发产物 ----
+__pycache__/
+*.py[cod]
+*.bak
+_e2e_downloads/
+_probe/shots/
+_probe/.cache/
+# 探针跑出来的临时报告/中间结果（不是源码）
+_probe/*.txt
+_probe/*_report.json
+# UI 改版的截图与录屏（过程证据，体积大且含界面截图，不入库）
+_probe/design/**/*.png
+_probe/design/**/*.jpg
+_probe/design/**/*.mp4
+_probe/design/evidence*/
+_probe/design/iter*/
+_probe/design/real/
+
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+*.swp
+
+# ---- 环境与虚拟环境 ----
+.venv/
+venv/
+env/
+.env
+_probe/design/**/report.json

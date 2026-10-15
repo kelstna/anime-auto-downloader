@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<title>组件布局快照</title>
+<link rel="stylesheet" href="../app/web/styles.css">
+<style>
+  body { padding: 20px 40px; }
+  h3 { font-size: 14px; margin: 26px 0 10px; color: var(--text-2); font-weight: 600; }
+  .data-table tbody td { height: 40px; }
+  .sub-item { margin-bottom: 12px; }
+  .sub-progress { width: 320px; }
+  .snap { border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px 20px; background: var(--surface); }
+</style>
+</head>
+<body>
+<h3>1. 工具栏（勾选后出现批量操作，让「全选」有实际用途）</h3>
+<div class="toolbar" id="anime-toolbar">
+        <label class="check"><input type="checkbox" id="check-all" checked><span>全选</span></label>
+        <span class="toolbar-sep"></span>
+        <span class="muted" id="selected-count">已选 3 部</span>
+        <div class="batch-actions" id="batch-actions">
+          <button type="button" class="btn btn-sm btn-primary" id="btn-batch-sub">批量订阅选中番剧</button>
+          <button type="button" class="btn btn-sm" id="btn-batch-fetch">只拉取信息，不下载</button>
+          <button type="button" class="btn btn-sm btn-ghost" id="btn-clear-selection">清空选择</button>
+        </div>
+        <div class="spacer"></div>
+        <label class="check"><input type="checkbox" id="only-airing" checked><span>仅显示在播/未完结</span></label>
+        <input type="search" class="input input-search" id="anime-filter" placeholder="筛选番剧名…">
+      </div>
+
+<h3>2. 资源表格（列对齐 / 数字右对齐 / 标题省略号）</h3>
+<div class="table-wrap">
+        <table class="data-table" id="res-table">
+          <thead>
+            <tr>
+              <th class="col-src">资源站</th>
+              <th class="col-group">字幕组</th>
+              <th class="col-title">标题</th>
+              <th class="col-lang">语言</th>
+              <th class="col-res">分辨率</th>
+              <th class="col-ep num">集数</th>
+              <th class="col-size num">大小</th>
+              <th class="col-seed num">做种</th>
+              <th class="col-time">发布</th>
+              <th class="col-act">操作</th>
+            </tr>
+          </thead>
+          <tbody id="res-body"><tr class="res-row is-selected">
+      <td class="col-src">动漫花园</td>
+      <td class="col-group" title="桜都字幕组">桜都字幕组</td>
+      <td class="col-title"><span class="ellipsis" title="[桜都字幕组] / Spy x Family (2025) [13][1080p][简体内嵌]间谍过家家第三季">[桜都字幕组] / Spy x Family (2025) [13][1080p][简体内嵌]间谍过家家第三季</span></td>
+      <td class="col-lang"><span class="lang-pill lang-chs">简体</span></td>
+      <td class="col-res">1080p</td>
+      <td class="col-ep num">13</td>
+      <td class="col-size num">384.2 MB</td>
+      <td class="col-seed num">1,204</td>
+      <td class="col-time">2026/08/28</td>
+      <td class="col-act act-cell"><span class="cell-actions">
+        <button type="button" class="btn btn-sm btn-primary">下载</button>
+        <button type="button" class="btn btn-sm">复制磁力</button></span></td>
+    </tr>
+<tr class="res-row">
+      <td class="col-src">爱恋动漫</td>
+      <td class="col-group" title="爱恋字幕社">爱恋字幕社</td>
+      <td class="col-title"><span class="ellipsis" title="[爱恋字幕社] 间谍过家家 第三季 - 12 [1080p][繁日內嵌]">[爱恋字幕社] 间谍过家家 第三季 - 12 [1080p][繁日內嵌]</span></td>
+      <td class="col-lang"><span class="lang-pill lang-cht">繁体</span></td>
+      <td class="col-res">1080p</td>
+      <td class="col-ep num">12</td>
+      <td class="col-size num">515.1 MB</td>
+      <td class="col-seed num">86</td>
+      <td class="col-time">2026/08/21</td>
+      <td class="col-act act-cell"><span class="cell-actions">
+        <button type="button" class="btn btn-sm btn-primary">下载</button>
+        <button type="button" class="btn btn-sm">复制磁力</button></span></td>
+    </tr>
+<tr class="res-row">
+      <td class="col-src">Nyaa</td>
+      <td class="col-group" title="SubsPlease">SubsPlease</td>
+      <td class="col-title"><span class="ellipsis" title="[SubsPlease] Spy x Family S03E13 (1080p) [A1B2C3D4].mkv">[SubsPlease] Spy x Family S03E13 (1080p) [A1B2C3D4].mkv</span></td>
+      <td class="col-lang"><span class="lang-pill lang-none">未标注</span></td>
+      <td class="col-res">1080p</td>
+      <td class="col-ep num">13</td>
+      <td class="col-size num">1.4 GiB</td>
+      <td class="col-seed num">711</td>
+      <td class="col-time">2026/08/28</td>
+      <td class="col-act act-cell"><span class="cell-actions">
+        <button type="button" class="btn btn-sm btn-primary">下载</button>
+        <button type="button" class="btn btn-sm">复制磁力</button></span></td>
+    </tr>
+<tr class="res-row">
+      <td class="col-src">动漫花园</td>
+      <td class="col-group" title="沸班亚马制作组">沸班亚马制作组</td>
+      <td class="col-title"><span class="ellipsis" title="[沸班亚马制作组] 间谍过家家 第三季 [01-13Fin][1080p][简繁内封]">[沸班亚马制作组] 间谍过家家 第三季 [01-13Fin][1080p][简繁内封]</span></td>
+      <td class="col-lang"><span class="lang-pill lang-both">简繁</span></td>
+      <td class="col-res">1080p</td>
+      <td class="col-ep num">13</td>
+      <td class="col-size num">5.8 GB</td>
+      <td class="col-seed num">42</td>
+      <td class="col-time">2026/08/30</td>
+      <td class="col-act act-cell"><span class="cell-actions">
+        <button type="button" class="btn btn-sm btn-primary">下载</button>
+        <button type="button" class="btn btn-sm">复制磁力</button></span></td>
+    </tr>
+<tr class="res-row">
+      <td class="col-src">动漫花园</td>
+      <td class="col-group" title="云光字幕组">云光字幕组</td>
+      <td class="col-title"><span class="ellipsis" title="[云光字幕组] 间谍过家家 第三季 - 11 [1080p][简日双语]">[云光字幕组] 间谍过家家 第三季 - 11 [1080p][简日双语]</span></td>
+      <td class="col-lang"><span class="lang-pill lang-both">简繁</span></td>
+      <td class="col-res">1080p</td>
+      <td class="col-ep num">11</td>
+      <td class="col-size num">498.0 MB</td>
+      <td class="col-seed num">9</td>
+      <td class="col-time">2026/08/14</td>
+      <td class="col-act act-cell"><span class="cell-actions">
+        <button type="button" class="btn btn-sm btn-primary">下载</button>
+        <button type="button" class="btn btn-sm">复制磁力</button></span></td>
+    </tr>
+<tr class="res-row">
+      <td class="col-src">Nyaa</td>
+      <td class="col-group" title="Erai-raws">Erai-raws</td>
+      <td class="col-title"><span class="ellipsis" title="[Erai-raws] Spy x Family - 13 [1080p][MultiSub]">[Erai-raws] Spy x Family - 13 [1080p][MultiSub]</span></td>
+      <td class="col-lang"><span class="lang-pill lang-both">简繁</span></td>
+      <td class="col-res">1080p</td>
+      <td class="col-ep num">13</td>
+      <td class="col-size num">864.6 MiB</td>
+      <td class="col-seed num">284</td>
+      <td class="col-time">2026/08/28</td>
+      <td class="col-act act-cell"><span class="cell-actions">
+        <button type="button" class="btn btn-sm btn-primary">下载</button>
+        <button type="button" class="btn btn-sm">复制磁力</button></span></td>
+    </tr></tbody>
+        </table>
+      </div>
+      <div class="empty small" id="res-empty" hidden>没有符合条件的资源</div>
+    </div>
+
+<h3>3. 番剧卡片（等高 / 标题两行 / 复选框）</h3>
+<div class="grid"><div class="card">
+      <div class="card-cover"><span class="card-cover-fallback">番</span>
+        <label class="card-check"><input type="checkbox" checked></label>
+        
+      </div>
+      <div class="card-body">
+        <div class="card-title">间谍过家家 第三季</div>
+        <div class="card-sub">SPY×FAMILY Season 3</div>
+        <div class="card-meta"><span class="tag">全 13 话</span><span class="tag">2025-10-04</span><span class="num">7.3</span></div>
+      </div>
+    </div>
+<div class="card is-subscribed">
+      <div class="card-cover"><span class="card-cover-fallback">番</span>
+        <label class="card-check"><input type="checkbox"></label>
+        <div class="card-badges"><span class="badge badge-ok">已订阅</span></div>
+      </div>
+      <div class="card-body">
+        <div class="card-title">药屋少女的呢喃 第三季</div>
+        <div class="card-sub">薬屋のひとりごと 第3期</div>
+        <div class="card-meta"><span class="tag">全 12 话</span><span class="tag">2025-10-22</span><span class="num">7.8</span></div>
+      </div>
+    </div>
+<div class="card">
+      <div class="card-cover"><span class="card-cover-fallback">番</span>
+        <label class="card-check"><input type="checkbox"></label>
+        
+      </div>
+      <div class="card-body">
+        <div class="card-title">僵尸搜寻中</div>
+        <div class="card-sub">#ゾンビさがしてます</div>
+        <div class="card-meta"><span class="tag">全 12 话</span><span class="tag">2026-10-03</span><span class="num">7.6</span></div>
+      </div>
+    </div>
+<div class="card">
+      <div class="card-cover"><span class="card-cover-fallback">番</span>
+        <label class="card-check"><input type="checkbox"></label>
+        
+      </div>
+      <div class="card-body">
+        <div class="card-title">赛博朋克：边缘行者 2</div>
+        <div class="card-sub">Cyberpunk: Edgerunners 2</div>
+        <div class="card-meta"><span class="tag">全 10 话</span><span class="tag">2026-10-20</span><span class="num">7.9</span></div>
+      </div>
+    </div></div>
+
+<h3>4. 弹窗「订阅设置」标签页（新结构：字幕组下拉 + 集数下拉 + 预览）</h3>
+<div class="snap"><div class="tab-body" id="tab-sub">
+      <p class="muted section-hint">在下面选好「字幕组、分辨率、下载哪一集」，直接点「加入订阅」即可完成，不必先去资源列表点选。</p>
+      <div class="form-grid">
+        <div class="form-cell">
+          <label for="s-group">限定字幕组</label>
+          <select id="s-group">
+            <option value="">不限字幕组（任意组）</option>
+            <option value="桜都字幕组" selected>桜都字幕组（42 条 · 动漫花园 / 爱恋动漫）</option>
+            <option value="SubsPlease">SubsPlease（22 条 · Nyaa）</option>
+          </select>
+          <span class="field-tip" id="s-group-tip">选定后只从这个字幕组下载</span>
+        </div>
+        <div class="form-cell">
+          <label for="s-res">限定分辨率</label>
+          <select id="s-res">
+            <option value="">不限</option>
+            <option>2160p</option>
+            <option>1080p</option>
+            <option>720p</option>
+            <option>480p</option>
+          </select>
+        </div>
+        <div class="form-cell">
+          <label for="s-episode">立即下载哪一集</label>
+          <select id="s-episode">
+            <option value="">不下载（仅订阅，之后自动追新）</option>
+            <option value="k13" selected>第 13 集 · 桜都字幕组 · 1080p · 384.2 MB</option>
+            <option value="k12">第 12 集 · 桜都字幕组 · 1080p · 515.1 MB</option>
+            <option value="k11">第 11 集 · 云光字幕组 · 1080p · 498.0 MB</option>
+          </select>
+          <span class="field-tip" id="s-episode-tip">按上面限定的字幕组/分辨率自动挑最优的一条</span>
+        </div>
+        <div class="form-cell">
+          <label for="s-initial">以后新集怎么下</label>
+          <select id="s-initial">
+            <option value="latest">只下载最新一集</option>
+            <option value="all">补齐已播出剧集</option>
+            <option value="none">只追新，不补旧</option>
+          </select>
+        </div>
+        <div class="form-cell">
+          <label for="s-total">总话数</label>
+          <input id="s-total" type="number" min="0" step="1">
+        </div>
+        <div class="form-cell span-2">
+          <label for="s-folder">下载目录</label>
+          <input id="s-folder" placeholder="D:\Anime\番剧简体名">
+        </div>
+      </div>
+
+      <div class="sub-preview" id="s-preview">将订阅：<b>间谍过家家 第三季</b><span>字幕组 <b>桜都字幕组</b></span><span>1080p</span><span>立即下载 <b>第 13 集</b></span><span class="ellipsis">目录 <b><下载根目录>\间谍过家家 第三季</b></span></div>
+
+      <div class="sub-actions">
+        <button type="button" class="btn btn-primary" id="btn-sub-add">加入订阅</button>
+        <button type="button" class="btn" id="btn-goto-res">去资源列表挑选单集 / 合集</button>
+        <span class="muted" id="sub-state"></span>
+      </div>
+
+      <div class="history" id="sub-history"></div>
+    </div></div>
+
+<h3>5. 设置页（统一后的 form-grid 结构）</h3>
+<section class="view" id="view-config">
+      <div class="settings">
+
+        <div class="panel">
+          <div class="panel-head"><h2>下载器 qBittorrent</h2><span class="hint">本机 WebUI，不经过代理</span></div>
+          <div class="form-grid">
+            <div class="form-cell"><label for="cfg-qb-url">WebUI 地址</label>
+              <input id="cfg-qb-url" placeholder="http://127.0.0.1:8080"></div>
+            <div class="form-cell"><label for="cfg-qb-user">用户名</label>
+              <input id="cfg-qb-user" placeholder="admin"></div>
+            <div class="form-cell"><label for="cfg-qb-pass">密码</label>
+              <input id="cfg-qb-pass" type="password" placeholder="本机免密可留空"></div>
+            <div class="form-cell"><label for="cfg-qb-cat">分类名</label>
+              <input id="cfg-qb-cat" placeholder="Bangumi"></div>
+            <div class="form-cell"><label for="cfg-qb-tags">标签</label>
+              <input id="cfg-qb-tags" placeholder="自动追番"></div>
+            <div class="form-cell"><span class="label-ghost" aria-hidden="true"></span>
+              <button type="button" class="btn" id="btn-qb-test">测试连接</button></div>
+          </div>
+          <div class="inline-state" id="qb-state"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>下载位置</h2><span class="hint">每部番剧一个文件夹，名称为 Bangumi 简体名</span></div>
+          <div class="form-grid">
+            <div class="form-cell span-2"><label for="cfg-root">下载根目录</label>
+              <input id="cfg-root" placeholder="<下载根目录>"></div>
+            <div class="form-cell"><label for="cfg-res">优先分辨率</label>
+              <select id="cfg-res"><option value="">不限</option><option>2160p</option><option>1080p</option><option>720p</option><option>480p</option></select></div>
+            <div class="form-cell form-cell-btn"><span class="label-ghost" aria-hidden="true"></span><button type="button" class="btn" id="btn-show-folders">查看已有文件夹</button></div>
+          </div>
+          <div class="folders" id="folder-list"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>代理设置</h2><span class="hint">仅作用于 Bangumi 与资源网站，不代理 qBittorrent</span></div>
+          <div class="form-grid">
+            <div class="form-cell"><label class="switch"><input type="checkbox" id="cfg-proxy-on"><span>启用代理</span></label></div>
+            <div class="form-cell span-2"><label for="cfg-proxy-url">代理地址</label>
+              <input id="cfg-proxy-url" placeholder="http://127.0.0.1:7890"></div>
+            <div class="form-cell"><label class="switch"><input type="checkbox" id="cfg-proxy-bgm"><span>Bangumi 走代理</span></label></div>
+            <div class="form-cell"><label class="switch"><input type="checkbox" id="cfg-proxy-src"><span>资源站走代理</span></label></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>资源网站优先级</h2><span class="hint">从上到下依次优先使用</span></div>
+          <div class="source-list" id="source-list"></div>
+          <p class="muted small">搜索顺序：先「字幕组 + 番剧名」，搜不到再单独用番剧名；同一条资源跨站去重。</p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>自动追番</h2><span class="hint">后台定时检查更新并自动下载新集</span></div>
+          <div class="form-grid">
+            <div class="form-cell"><label class="switch"><input type="checkbox" id="cfg-sub-on"><span>启用自动追番</span></label></div>
+            <div class="form-cell"><label for="cfg-sub-interval">检查间隔（分钟）</label>
+              <input id="cfg-sub-interval" type="number" min="5" max="1440" step="5"></div>
+            <div class="form-cell"><label for="cfg-sub-initial">加入订阅时</label>
+              <select id="cfg-sub-initial">
+                <option value="latest">只下载最新一集</option>
+                <option value="all">补齐已播出剧集</option>
+                <option value="none">只追新，不补旧</option>
+              </select></div>
+            <div class="form-cell"><label for="cfg-sub-max">每轮最多下载集数</label>
+              <input id="cfg-sub-max" type="number" min="1" max="50" step="1"></div>
+            <div class="form-cell"><label class="switch"><input type="checkbox" id="cfg-sub-groupfirst"><span>优先「字幕组+番剧名」</span></label></div>
+            <div class="form-cell form-cell-btn"><span class="label-ghost" aria-hidden="true"></span><button type="button" class="btn" id="btn-check-now">立即检查全部订阅</button></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>服务</h2><span class="hint">配置保存后立即生效</span></div>
+          <div class="form-grid">
+            <div class="form-cell"><label for="cfg-host">监听地址</label>
+              <input id="cfg-host" placeholder="127.0.0.1"></div>
+            <div class="form-cell"><label for="cfg-port">端口</label>
+              <input id="cfg-port" type="number" min="1024" max="65535"></div>
+            <div class="form-cell"><label class="switch"><input type="checkbox" id="cfg-lan"><span>允许局域网访问</span></label></div>
+            <div class="form-cell"><label class="switch"><input type="checkbox" id="cfg-openbrowser"><span>启动时打开浏览器</span></label></div>
+          </div>
+          <div class="config-path" id="config-path"></div>
+        </div>
+
+        <div class="save-bar">
+          <button type="button" class="btn btn-primary btn-lg" id="btn-save-config">保存全部设置</button>
+          <span class="muted" id="save-state"></span>
+        </div>
+      </div>
+    </section>
+
+<h3>6. 字幕组卡片</h3>
+<div class="group-list"><div class="group-card is-selected">
+      <div class="group-head"><span class="group-name">桜都字幕组</span><span class="badge badge-accent">n=42</span></div>
+      <div class="group-meta"><span class="tag">动漫花园</span> <span class="tag">爱恋动漫</span>
+        <span class="tag">team_id: 619</span></div>
+      <button type="button" class="btn btn-sm">只从此字幕组下载</button>
+    </div>
+<div class="group-card">
+      <div class="group-head"><span class="group-name">沸班亚马制作组</span><span class="badge badge-accent">n=21</span></div>
+      <div class="group-meta"><span class="tag">动漫花园</span> <span class="tag">爱恋动漫</span>
+        <span class="tag">team_id: 619</span></div>
+      <button type="button" class="btn btn-sm">只从此字幕组下载</button>
+    </div>
+<div class="group-card">
+      <div class="group-head"><span class="group-name">云光字幕组</span><span class="badge badge-accent">n=14</span></div>
+      <div class="group-meta"><span class="tag">动漫花园</span>
+        <span class="tag">team_id: 619</span></div>
+      <button type="button" class="btn btn-sm">只从此字幕组下载</button>
+    </div>
+<div class="group-card">
+      <div class="group-head"><span class="group-name">SubsPlease</span><span class="badge badge-accent">n=22</span></div>
+      <div class="group-meta"><span class="tag">Nyaa</span>
+        </div>
+      <button type="button" class="btn btn-sm">只从此字幕组下载</button>
+    </div>
+<div class="group-card">
+      <div class="group-head"><span class="group-name">爱恋&猫恋汉化组</span><span class="badge badge-accent">n=12</span></div>
+      <div class="group-meta"><span class="tag">爱恋动漫</span>
+        </div>
+      <button type="button" class="btn btn-sm">只从此字幕组下载</button>
+    </div>
+<div class="group-card">
+      <div class="group-head"><span class="group-name">ToonsHub</span><span class="badge badge-accent">n=12</span></div>
+      <div class="group-meta"><span class="tag">Nyaa</span>
+        </div>
+      <button type="button" class="btn btn-sm">只从此字幕组下载</button>
+    </div></div>
+
+<h3>7. 订阅条目（封面 / 事实行 / 进度 / 操作）</h3>
+<div class="sub-list">
+  <div class="sub-item">
+    <img class="sub-cover" alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='62' height='84'%3E%3Crect width='62' height='84' fill='%23222'/%3E%3C/svg%3E">
+    <div class="sub-item-body">
+      <div class="sub-item-title">间谍过家家 第三季</div>
+      <div class="sub-meta">
+        <span class="sub-fact">字幕组 <b>桜都字幕组</b></span>
+        <span class="sub-fact">分辨率 <b>1080p</b></span>
+        <span class="sub-fact">已下载 <b>13</b> 集</span>
+        <span class="sub-fact">上次检查 <b>2026-10-04 16:20</b></span>
+        <span class="badge badge-ok">新增 2 集</span>
+      </div>
+      <div class="sub-progress"><i style="width:100%"></i></div>
+      <div class="sub-path"><下载根目录>\间谍过家家 第三季</div>
+    </div>
+    <div class="sub-item-actions">
+      <button type="button" class="btn btn-sm btn-primary">补下载单集</button>
+      <button type="button" class="btn btn-sm">立即检查</button>
+      <button type="button" class="btn btn-sm">打开目录</button>
+      <button type="button" class="btn btn-sm btn-danger">删除订阅</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

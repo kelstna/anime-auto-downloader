@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<title>UI 测试页（mock 数据）</title>
+<link rel="stylesheet" href="../app/web/styles.css">
+<style>
+  /* 仅测试页使用：标注区域，方便截图核对 */
+  .probe-note { font-size: 11px; color: var(--text-3); padding: 4px 0 0 2px; }
+</style>
+</head>
+<body>
+<script>
+/* 截图/验收用：?theme=light|dark 强制主题（只影响这个 mock 页，产品逻辑不变） */
+(function () {
+  try {
+    var forced = new URLSearchParams(location.search).get('theme');
+    if (forced === 'light' || forced === 'dark') localStorage.setItem('anime-auto-dl-theme', forced);
+    else localStorage.removeItem('anime-auto-dl-theme');
+  } catch (e) { /* 忽略 */ }
+})();
+</script>
+<!-- 与 index.html 完全一致的结构（由构建脚本从 index.html 抽取） -->
+
+<div class="app">
+
+  <!-- ============ 侧边栏 ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">番</div>
+      <div class="brand-text">
+        <strong>自动下载番剧</strong>
+        <span id="app-version">v1.2</span>
+      </div>
+    </div>
+
+    <nav class="nav" id="nav">
+      <button type="button" class="nav-item is-active" data-view="anime">
+        <span class="nav-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7.4" height="7.4" rx="1.7"/><rect x="13.6" y="3" width="7.4" height="7.4" rx="1.7"/><rect x="3" y="13.6" width="7.4" height="7.4" rx="1.7"/><rect x="13.6" y="13.6" width="7.4" height="7.4" rx="1.7"/></svg></span><span class="nav-label">在看番剧</span>
+        <span class="nav-badge" id="nav-count-anime">–</span>
+      </button>
+      <button type="button" class="nav-item" data-view="subs">
+        <span class="nav-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3.5v9.5"/><path d="m8.2 9.4 3.8 3.8 3.8-3.8"/><path d="M4.5 15.5v2.6A2.4 2.4 0 0 0 6.9 20.5h10.2a2.4 2.4 0 0 0 2.4-2.4v-2.6"/></svg></span><span class="nav-label">我的订阅</span>
+        <span class="nav-badge" id="nav-count-subs">–</span>
+      </button>
+      <button type="button" class="nav-item" data-view="config">
+        <span class="nav-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5h8.5"/><path d="M18.5 7.5H20"/><circle cx="16" cy="7.5" r="2.1"/><path d="M4 16.5h3.5"/><path d="M13.5 16.5H20"/><circle cx="10.5" cy="16.5" r="2.1"/></svg></span><span class="nav-label">设置</span>
+      </button>
+      <button type="button" class="nav-item" data-view="logs">
+        <span class="nav-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.4"/><path d="m7.5 9.5 3 2.9-3 2.9"/><path d="M12.8 15.3H17"/></svg></span><span class="nav-label">运行日志</span>
+      </button>
+    </nav>
+
+    <!-- 侧栏「最近更新」：订阅里**近 2 天内**更新过的番（按最近一集播出时间排）（点一条跳到「我的订阅」并高亮那张卡片） -->
+    <div class="side-updates" id="side-updates" hidden>
+      <div class="side-updates-head">
+        <span>最近更新<i class="side-updates-hint" id="side-updates-hint"></i></span>
+        <button type="button" class="side-updates-more" id="btn-side-updates" title="看最近最多 50 条更新">更多</button>
+      </div>
+      <div class="side-updates-list" id="side-updates-list"></div>
+    </div>
+
+    <div class="side-status" id="side-status">
+      <div class="status-row"><span class="dot dot-idle" id="dot-bgm"></span><span>Bangumi</span><b id="st-bgm">未配置</b></div>
+      <div class="status-row"><span class="dot dot-idle" id="dot-qb"></span><span>qBittorrent</span><b id="st-qb">检测中</b></div>
+      <div class="status-row"><span class="dot dot-idle" id="dot-proxy"></span><span>代理</span><b id="st-proxy">关闭</b></div>
+      <!-- qBittorrent 掉线期间攒下的待下载集数：有货才显示，点一下立刻重试补下载 -->
+      <div class="status-row is-action" id="row-pending" hidden
+           title="qBittorrent 恢复连接后会自动补下载；点这里立刻重试">
+        <span class="dot dot-warn" id="dot-pending"></span><span>待下载</span><b id="st-pending">0</b>
+      </div>
+      <div class="status-row"><span class="dot dot-idle" id="dot-watch"></span><span>自动追番</span><b id="st-watch">–</b></div>
+      <div class="status-row"><span class="dot dot-idle"></span><span>下载目录</span><b id="st-root" class="ellipsis" title="">–</b></div>
+    </div>
+
+    <div class="side-foot">
+      <button type="button" class="btn btn-ghost btn-block" id="btn-theme">切换主题</button>
+    </div>
+  </aside>
+
+  <!-- ============ 主区域 ============ -->
+  <main class="content">
+    <header class="topbar">
+      <div class="topbar-title">
+        <h1 id="view-title">在看番剧</h1>
+        <p id="view-sub">从 Bangumi 拉取你正在追的番剧</p>
+      </div>
+      <div class="topbar-actions" id="topbar-actions"></div>
+    </header>
+
+    <!-- 在看番剧 -->
+    <section class="view" id="view-anime">
+      <!-- Token 只在首次配置和失效时用：压成一行，把首屏让给封面 -->
+      <div class="panel token-panel" id="token-panel">
+        <span class="token-label">Bangumi Token</span>
+        <input type="password" id="token-input" class="token-input" placeholder="粘贴 Access Token"
+               autocomplete="off" spellcheck="false" aria-label="Bangumi Access Token">
+        <button type="button" class="btn btn-primary btn-sm" id="btn-save-token">保存并验证</button>
+        <button type="button" class="btn btn-sm" id="btn-load-anime">拉取在看番剧</button>
+        <a class="link" id="link-get-token" href="https://next.bgm.tv/demo/access-token"
+           target="_blank" rel="noopener">获取 Token ↗</a>
+        <span class="token-state" id="token-state"></span>
+      </div>
+
+      <div class="toolbar" id="anime-toolbar">
+        <label class="check"><input type="checkbox" id="check-all"><span>全选</span></label>
+        <span class="toolbar-sep"></span>
+        <span class="muted" id="selected-count">已选 0 部</span>
+        <div class="batch-actions" id="batch-actions" hidden>
+          <!-- 唯一入口：点「批量订阅」打开规则窗口，在里面填规则再执行（不绕过规则） -->
+          <button type="button" class="btn btn-sm btn-primary" id="btn-batch-sub" title="按规则逐条匹配后订阅">批量订阅</button>
+          <button type="button" class="btn btn-sm" id="btn-batch-fetch">只拉取信息，不下载</button>
+          <button type="button" class="btn btn-sm btn-ghost" id="btn-clear-selection">清空选择</button>
+        </div>
+        <div class="spacer"></div>
+        <!-- 默认不勾选：Bangumi「在看」里的番**全部**显示（用户要求），想看哪些还在播时再自己勾上 -->
+        <label class="check"><input type="checkbox" id="only-airing"><span>只看在播/未完结</span></label>
+        <input type="search" class="input input-search" id="anime-filter" placeholder="筛选番剧名…">
+      </div>
+
+      <div class="grid" id="anime-grid"></div>
+      <div class="empty" id="anime-empty" hidden>
+        <div class="empty-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7.4" height="7.4" rx="1.7"/><rect x="13.6" y="3" width="7.4" height="7.4" rx="1.7"/><rect x="3" y="13.6" width="7.4" height="7.4" rx="1.7"/><rect x="13.6" y="13.6" width="7.4" height="7.4" rx="1.7"/></svg></div>
+        <p>还没有数据。填写 Token 后点击「拉取在看番剧」。</p>
+      </div>
+    </section>
+
+    <!-- 我的订阅 -->
+    <section class="view" id="view-subs" hidden>
+      <div class="sub-summary" id="sub-summary"></div>
+      <div class="sub-batch-bar" id="sub-batch-bar">
+        <button type="button" class="btn btn-sm" id="btn-subs-batch-toggle">批量操作</button>
+        <label class="check sub-batch-all"><input type="checkbox" id="subs-select-all"><span>全选</span></label>
+        <span class="muted small" id="sub-batch-count"></span>
+        <div class="spacer"></div>
+        <button type="button" class="btn btn-sm" id="btn-subs-enable-all" disabled>启用</button>
+        <button type="button" class="btn btn-sm" id="btn-subs-disable-all" disabled>停用</button>
+        <button type="button" class="btn btn-sm" id="btn-subs-check-all" disabled>立即检查</button>
+        <button type="button" class="btn btn-sm btn-danger" id="btn-subs-delete-all" disabled>删除</button>
+        <span class="muted small" id="sub-batch-state"></span>
+      </div>
+      <div class="sub-list" id="sub-list"></div>
+      <div class="empty" id="subs-empty" hidden>
+        <div class="empty-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v9.5"/><path d="m8.2 9.4 3.8 3.8 3.8-3.8"/><path d="M4.5 15.5v2.6A2.4 2.4 0 0 0 6.9 20.5h10.2a2.4 2.4 0 0 0 2.4-2.4v-2.6"/></svg></div>
+        <p>还没有订阅。到「在看番剧」里点开一部番剧，选好字幕组和剧集加入订阅。</p>
+      </div>
+    </section>
+
+    <!-- 设置 -->
+    <section class="view" id="view-config" hidden>
+      <div class="settings">
+
+        <div class="panel">
+          <div class="panel-head"><h2>下载器 qBittorrent</h2><span class="hint">本机 WebUI，不经过代理</span></div>
+          <div class="form-grid">
+            <div class="form-cell"><label for="cfg-qb-url">WebUI 地址</label>
+              <input id="cfg-qb-url" placeholder="http://127.0.0.1:8080"></div>
+            <div class="form-cell"><label for="cfg-qb-user">用户名</label>
+              <input id="cfg-qb-user" placeholder="admin"></div>
+            <div class="form-cell"><label for="cfg-qb-pass">密码</label>
+              <input id="cfg-qb-pass" type="password" placeholder="本机免密可留空"></div>
+            <div class="form-cell"><label for="cfg-qb-cat">分类名</label>
+              <input id="cfg-qb-cat" placeholder="Bangumi"></div>
+            <div class="form-cell"><label for="cfg-qb-tags">标签</label>
+              <input id="cfg-qb-tags" placeholder="自动追番"></div>
+          </div>
+          <div class="panel-actions">
+            <button type="button" class="btn btn-sm" id="btn-qb-test">测试连接</button>
+          </div>
+          <div class="inline-state" id="qb-state"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>下载位置</h2><span class="hint">每部番剧一个文件夹，名称为 Bangumi 简体名</span></div>
+          <div class="form-grid">
+            <div class="form-cell span-2"><label for="cfg-root">下载根目录</label>
+              <input id="cfg-root" placeholder="D:\Anime"></div>
+          </div>
+          <div class="panel-actions">
+            <button type="button" class="btn btn-sm" id="btn-show-folders">查看已有文件夹</button>
+          </div>
+          <div class="folders" id="folder-list"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>代理设置</h2><span class="hint">仅作用于 Bangumi 与资源网站，不代理 qBittorrent</span></div>
+          <div class="form-grid">
+            <div class="form-cell"><label class="switch"><input type="checkbox" id="cfg-proxy-on"><span>启用代理</span></label></div>
+            <div class="form-cell"><label class="switch"><input type="checkbox" id="cfg-proxy-bgm"><span>Bangumi 走代理</span></label></div>
+            <div class="form-cell"><label class="switch"><input type="checkbox" id="cfg-proxy-src"><span>资源站走代理</span></label></div>
+            <div class="form-cell"><label for="cfg-proxy-url">代理地址</label>
+              <input id="cfg-proxy-url" placeholder="http://127.0.0.1:7890"></div>
+            <div class="form-cell"></div>
+            <div class="form-cell"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>资源网站优先级</h2><span class="hint">从上到下依次优先使用</span></div>
+          <div class="source-list" id="source-list"></div>
+          <p class="muted small">搜索顺序：先「字幕组 + 番剧名」，搜不到再单独用番剧名；同一条资源跨站去重。</p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>自动追番</h2><span class="hint">后台定时检查更新并自动下载新集</span></div>
+          <div class="form-grid cols-2">
+            <div class="form-cell is-switch"><label class="switch"><input type="checkbox" id="cfg-sub-on"><span>启用自动追番</span></label></div>
+            <div class="form-cell is-switch"></div>
+            <div class="form-cell"><label for="cfg-sub-interval">检查间隔（分钟）</label>
+              <input id="cfg-sub-interval" type="number" min="5" max="1440" step="5"></div>
+            <div class="form-cell"><label for="cfg-sub-initial">加入订阅时</label>
+              <select id="cfg-sub-initial">
+                <option value="latest">只下载最新一集</option>
+                <option value="all">补齐已播出剧集</option>
+                <option value="none">只追新，不补旧</option>
+              </select></div>
+            <div class="form-cell"><label for="cfg-sub-max">每轮最多下载集数</label>
+              <input id="cfg-sub-max" type="number" min="1" max="50" step="1"></div>
+            <div class="form-cell"></div>
+          </div>
+          <div class="panel-actions">
+            <button type="button" class="btn btn-sm" id="btn-check-now">立即检查全部订阅</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>服务</h2><span class="hint">配置保存后立即生效</span></div>
+          <div class="form-grid cols-2">
+            <div class="form-cell is-switch"><label class="switch"><input type="checkbox" id="cfg-lan"><span>允许局域网访问</span></label></div>
+            <div class="form-cell is-switch"><label class="switch"><input type="checkbox" id="cfg-openbrowser"><span>启动时打开浏览器</span></label></div>
+            <div class="form-cell"><label for="cfg-host">监听地址</label>
+              <input id="cfg-host" placeholder="127.0.0.1"></div>
+            <div class="form-cell"><label for="cfg-port">端口</label>
+              <input id="cfg-port" type="number" min="1024" max="65535"></div>
+          </div>
+          <!-- 局域网地址：勾上「允许局域网访问」后，手机/平板照这里显示的地址打开（改完要重启服务才生效） -->
+          <div class="lan-hint" id="lan-hint" hidden></div>
+          <div class="config-path" id="config-path"></div>
+        </div>
+
+        <div class="save-bar">
+          <button type="button" class="btn btn-primary" id="btn-save-config">保存全部设置</button>
+          <span class="muted" id="save-state"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 日志 -->
+    <section class="view" id="view-logs" hidden>
+      <div class="panel">
+        <div class="panel-head"><h2>最近 300 行</h2><span class="hint">按时间正序</span>
+          <button type="button" class="btn btn-sm" id="btn-reload-logs">刷新</button></div>
+        <pre class="logbox" id="logbox"></pre>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ============ 「最近更新」弹窗：侧栏点「更多」打开，最多 50 条 ============ -->
+<div class="modal-backdrop" id="updates-modal" hidden>
+  <div class="modal updates-modal" role="dialog" aria-modal="true" aria-labelledby="updates-title">
+    <header class="updates-head">
+      <div>
+        <h2 id="updates-title">最近更新</h2>
+        <p class="updates-sub" id="updates-sub">按最近一集的播出时间排序</p>
+      </div>
+      <button type="button" class="icon-btn" id="updates-close" title="关闭"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+    </header>
+    <div class="updates-body" id="updates-list"></div>
+  </div>
+</div>
+
+<!-- ============ 番剧详情弹窗 ============ -->
+<div class="modal-backdrop" id="modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <header class="modal-head">
+      <img class="modal-cover" id="m-cover" alt="">
+      <div class="modal-info">
+        <h2 id="m-title">—</h2>
+        <div class="modal-sub" id="m-sub"></div>
+        <div class="modal-aliases" id="m-aliases"></div>
+      </div>
+      <button type="button" class="icon-btn" id="m-close" title="关闭"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+    </header>
+
+    <div class="tabs" id="m-tabs">
+      <button type="button" class="tab is-active" data-tab="res">资源列表</button>
+      <button type="button" class="tab" data-tab="sub">订阅设置</button>
+    </div>
+
+    <!-- 资源列表 -->
+    <div class="tab-body" id="tab-res">
+      <!-- 手动搜索：自动搜索搜不到、或想指定某条资源时自己给关键词；加订阅时会把词记住，之后自动追新也用它 -->
+      <div class="manual-search">
+        <input id="f-keyword" placeholder="手动搜索关键词，回车即搜（可带字幕组名，如「ANi 药屋少女的呢喃」）">
+        <button type="button" class="btn" id="btn-keyword-search">手动搜索</button>
+        <button type="button" class="btn btn-sm" id="btn-keyword-reset" hidden>恢复自动搜索</button>
+      </div>
+      <div class="filters">
+        <label class="filter"><span>资源站</span>
+          <select id="f-source"><option value="">全部</option></select></label>
+        <label class="filter"><span>字幕组</span>
+          <select id="f-group"><option value="">全部</option></select></label>
+        <label class="filter"><span>字幕语言</span>
+          <select id="f-lang">
+            <option value="">全部</option>
+            <option value="chs">简体</option>
+            <option value="cht">繁体</option>
+            <option value="chj">简日双语</option>
+            <option value="cjt">繁日双语</option>
+            <option value="both">简繁/双语</option>
+            <option value="jp">日文生肉</option>
+            <option value="unknown">未标注</option>
+          </select></label>
+        <label class="filter"><span>分辨率</span>
+          <select id="f-res"><option value="">全部</option><option>2160p</option><option>1080p</option><option>720p</option><option>480p</option></select></label>
+        <label class="filter"><span>排序</span>
+          <select id="f-sort">
+            <option value="default">站点优先级</option>
+            <option value="ep-desc">集数（新→旧）</option>
+            <option value="ep-asc">集数（旧→新）</option>
+            <option value="seeders">做种数</option>
+            <option value="size">文件大小</option>
+          </select></label>
+        <label class="check" title="关掉后显示所有季度（含上一季）的资源"><input type="checkbox" id="f-season" checked><span>只看本季</span></label>
+        <!-- 右侧动作成组：整行换行时也贴右，不会掉到下一行最左边 -->
+        <div class="filters-actions">
+          <button type="button" class="btn btn-sm" id="btn-research">重新搜索</button>
+          <!-- 筛选完可直接订阅：优先用表里点选的那条资源；没点选则用「订阅设置」里选的集数 -->
+          <button type="button" class="btn btn-primary" id="btn-sub-add-res">加入订阅</button>
+        </div>
+      </div>
+      <!-- 第二行：合集 / 噪声项（用户要求：和主筛选分开一行） -->
+      <div class="filters-row2">
+        <label class="check"><input type="checkbox" id="f-batch"><span>含合集</span></label>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" id="res-table">
+          <thead>
+            <tr>
+              <!-- 表头可点排序（用户要求：搜索结果支持按标签排序）：data-sort 对应 sortResourceRows 的键 -->
+              <th class="col-src sortable" data-sort="source">资源站</th>
+              <th class="col-group sortable" data-sort="group">字幕组</th>
+              <th class="col-title sortable" data-sort="title">标题</th>
+              <th class="col-lang sortable" data-sort="lang">语言</th>
+              <th class="col-res sortable" data-sort="resolution">分辨率</th>
+              <th class="col-ep num sortable" data-sort="episode">集数</th>
+              <th class="col-size num sortable" data-sort="size">大小</th>
+              <th class="col-seed num sortable" data-sort="seeders">做种</th>
+              <th class="col-time sortable" data-sort="published">发布</th>
+              <th class="col-act">操作</th>
+            </tr>
+          </thead>
+          <tbody id="res-body"></tbody>
+        </table>
+      </div>
+      <div class="empty small" id="res-empty" hidden>没有符合条件的资源</div>
+      <div class="search-state" id="search-state"></div>
+    </div>
+
+    <!-- 字幕组列表已并入「订阅设置」的限定字幕组下拉，这里不再单独成页 -->
+    <!-- 保留隐藏容器供 app.js 渲染，避免旧代码引用报错 -->
+    <div id="tab-group" hidden><div class="group-list" id="group-list"></div><div id="group-empty"></div></div>
+
+    <!-- 订阅设置 -->
+    <div class="tab-body" id="tab-sub" hidden>
+      <p class="muted section-hint">选好字幕组与集数，直接点「加入订阅」即可。</p>
+      <div class="form-grid">
+        <div class="form-cell">
+
+          <label for="s-source">资源站</label>
+
+          <select id="s-source"><option value="">不限</option></select>
+
+          <span class="field-tip">自动追新只在这个站搜（空=所有启用的站）</span>
+
+        </div>
+
+        <div class="form-cell">
+          <label for="s-group">限定字幕组</label>
+          <select id="s-group">
+            <option value="">不限字幕组（任意组）</option>
+          </select>
+          <span class="field-tip" id="s-group-tip">选定后只从这个字幕组下载</span>
+        </div>
+        <div class="form-cell">
+          <label for="s-res">限定分辨率</label>
+          <select id="s-res">
+            <option value="">不限</option>
+            <option>2160p</option>
+            <option>1080p</option>
+            <option>720p</option>
+            <option>480p</option>
+          </select>
+
+        <span class="field-tip">自动追新也只用这个分辨率</span>
+
+        </div>
+
+        <div class="form-cell">
+
+          <label for="s-lang">字幕语言</label>
+
+          <select id="s-lang">
+
+            <option value="">不限</option>
+
+            <option value="chs">简体</option>
+
+            <option value="cht">繁体</option>
+
+            <option value="chj">简日双语</option>
+
+            <option value="cjt">繁日双语</option>
+
+            <option value="both">简繁/双语</option>
+
+            <option value="jp">日文生肉</option>
+
+            <option value="unknown">未标注</option>
+
+          </select>
+
+          <span class="field-tip">选简体就只下简体：繁体、简繁、生肉都不会再自动下</span>
+        </div>
+        <div class="form-cell">
+          <label for="s-episode">立即下载哪一集</label>
+          <select id="s-episode">
+            <option value="">不下载（仅订阅，之后自动追新）</option>
+          </select>
+          <span class="field-tip" id="s-episode-tip">按字幕组与分辨率自动挑最优的一条</span>
+        </div>
+        <div class="form-cell">
+          <label for="s-initial">以后新集怎么下</label>
+          <select id="s-initial">
+            <option value="latest">只下载最新一集</option>
+            <option value="all">补齐已播出剧集</option>
+            <option value="none">只追新，不补旧</option>
+          </select>
+        </div>
+        <div class="form-cell">
+          <label for="s-total">总话数</label>
+          <input id="s-total" type="number" min="0" step="1">
+        </div>
+        <div class="form-cell">
+          <label for="s-keyword">自定义搜索词</label>
+          <input id="s-keyword" placeholder="留空 = 按番剧名/别名自动搜索">
+          <span class="field-tip" id="s-keyword-tip">留空＝按番剧名/别名搜索；手动搜索的词会自动填进来</span>
+        </div>
+        <div class="form-cell span-2">
+          <label for="s-folder">下载目录</label>
+          <input id="s-folder" placeholder="D:\Anime\番剧简体名">
+        </div>
+      </div>
+
+      <div class="sub-preview" id="s-preview"></div>
+
+      <div class="sub-actions">
+        <button type="button" class="btn btn-primary" id="btn-sub-add">加入订阅</button>
+        <button type="button" class="btn" id="btn-goto-res">去资源列表挑选单集 / 合集</button>
+        <span class="muted" id="sub-state"></span>
+      </div>
+
+      <div class="history" id="sub-history"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<!-- ui.js 必须在 app.js 之前：自绘下拉框与三态主题由它统一管理 -->
+
+
+
+  <!-- 管理已下载：独立弹窗（以前是卡片里展开，会顶动整行导致按钮位移） -->
+  <div class="modal-backdrop" id="dl-modal" hidden>
+    <div class="modal downloads-modal" role="dialog" aria-modal="true" aria-labelledby="dl-title">
+      <div class="updates-head">
+        <div>
+          <h2 id="dl-title">已下载文件管理</h2>
+          <p class="updates-sub" id="dl-sub"></p>
+        </div>
+        <button type="button" class="icon-btn" id="dl-close" title="关闭">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+        </button>
+      </div>
+      <div class="updates-body" id="dl-body"></div>
+    </div>
+  </div>
+
+
+  <!-- 批量订阅设置：按规则顺序匹配，第一条没匹配到就用下一条 -->
+  <div class="modal-backdrop" id="batch-modal" hidden>
+    <div class="modal batch-modal" role="dialog" aria-modal="true" aria-labelledby="batch-title">
+      <div class="updates-head">
+        <div>
+          <h2 id="batch-title">批量订阅设置</h2>
+          <p class="updates-sub">按顺序尝试规则：第一条没匹配到就试下一条，全部不匹配则该番不订阅</p>
+        </div>
+        <button type="button" class="icon-btn" id="batch-close" title="关闭">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+        </button>
+      </div>
+      <div class="updates-body">
+        <div id="batch-rules" class="batch-rules"></div>
+        <div class="panel-actions">
+          <button type="button" class="btn btn-sm" id="batch-add-rule">添加订阅规则</button>
+          <span class="muted small" id="batch-hint">优先级从上到下；合集不会自动下载，只会下最新一集，之后自动追新</span>
+        </div>
+        <div id="batch-result" class="batch-result"></div>
+      </div>
+      <div class="batch-foot">
+        <button type="button" class="btn btn-primary" id="batch-run">开始批量订阅</button>
+      </div>
+    </div>
+  </div>
+
+
+
+<script>
+/* =========================================================================
+ * mock 层：替换 window.fetch，让 app.js 在无后端情况下渲染完整界面
+ * ========================================================================= */
+(function () {
+  const now = Date.now() / 1000;
+
+  const subjects = [
+    { id: 498378, name: 'SPY×FAMILY Season 3', name_cn: '间谍过家家 第三季',
+      summary: '间谍过家家第三季。', cover: '', date: '2025-10-04', eps: 13, total_episodes: 13,
+      score: 7.3, rank: 1441, collect_type: 3, ep_status: 13, subscribed: true,
+      aliases: ['间谍过家家 第三季', '間谍过家家 第三季', 'SPY x FAMILY', 'Spy x Family Season 3'] },
+    { id: 568244, name: '薬屋のひとりごと 第3期', name_cn: '药屋少女的呢喃 第三季',
+      summary: '', cover: '', date: '2025-10-22', eps: 12, total_episodes: 12,
+      score: 8.1, rank: 210, collect_type: 3, ep_status: 4, subscribed: false,
+      aliases: ['药屋少女的呢喃 第三季', '藥屋少女的呢喃 第三季', 'Kusuriya no Hitorigoto'] },
+    { id: 586255, name: 'ゾンビさがしてます', name_cn: '僵尸搜寻中',
+      summary: '', cover: '', date: '2026-10-03', eps: 12, total_episodes: 12,
+      score: 6.4, rank: 3021, collect_type: 3, ep_status: 1, subscribed: false,
+      aliases: ['僵尸搜寻中', '#ゾンビさがしてます'] },
+    { id: 513878, name: 'Cyberpunk: Edgerunners 2', name_cn: '赛博朋克：边缘行者 2',
+      summary: '', cover: '', date: '2026-10-20', eps: 10, total_episodes: 10,
+      score: 8.9, rank: 88, collect_type: 3, ep_status: 0, subscribed: false,
+      aliases: ['赛博朋克：边缘行者 2', 'Cyberpunk: Edgerunners 2'] },
+    { id: 639938, name: 'スティール・ボール・ラン', name_cn: '飙马野郎 JOJO的奇妙冒险 第二&第三赛段',
+      summary: '', cover: '', date: '2026-03-21', eps: 11, total_episodes: 11,
+      score: 9.2, rank: 15, collect_type: 3, ep_status: 11, subscribed: false,
+      aliases: ['飙马野郎', 'STEEL BALL RUN', 'JoJo no Kimyou na Bouken'] },
+    { id: 361095, name: 'ゴールデンカムイ 第四期', name_cn: '黄金神威 第四季',
+      summary: '', cover: '', date: '2026-01-10', eps: 14, total_episodes: 14,
+      score: 8.6, rank: 120, collect_type: 3, ep_status: 14, subscribed: false,
+      aliases: ['黄金神威 第四季', 'Golden Kamuy'] }
+  ];
+
+  // 与后端 Subject.to_dict() 保持一致：补齐 display_name / traditional_name / english_name
+  // 并补上资源缓存字段（后端 /api/bangumi/collections 会返回），用于验证卡片标记
+  subjects.forEach((s, i) => {
+    s.display_name = s.name_cn || s.name || `subject-${s.id}`;
+    s.traditional_name = s.name_cn || s.name || '';
+    s.english_name = s.aliases.find((a) => /^[\x00-\x7F]+$/.test(a)) || '';
+    s.resources_cached = i % 3 !== 1;                 // 大部分番剧已预热
+    s.resources_cached_count = s.resources_cached ? (12 + i * 31) : 0;
+    s.resources_cached_age = s.resources_cached ? (60 + i * 240) : null;
+    // 下次更新（后端 core/airtimes.py 会按 bangumi-data 算好这些字段）
+    if (i !== 3) {                                    // 留一部没有数据，验证「没有就不占位」
+      const soon = i === 0;                            // 第一部设为「即将更新」验证高亮
+      const finished = i === 5;                        // 最后一部设为「已完结」验证替换文案
+      const next = Math.floor(Date.now() / 1000) + (soon ? 2 * 3600 : (i + 1) * 24 * 3600);
+      const d = new Date(next * 1000);
+      const wd = '周' + '日一二三四五六'[d.getDay()];
+      const jst = new Date((next + 3600) * 1000);
+      const wdJst = '周' + '日一二三四五六'[jst.getDay()];
+      const p2 = (n) => String(n).padStart(2, '0');
+      const mmdd = `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+      s.airtime = {
+        next_ts: next,
+        next_text: `${mmdd}（${wd}）`,
+        next_full: `${d.getFullYear()}-${mmdd}（${wd}）`,
+        jst_text: `${p2(jst.getMonth() + 1)}-${p2(jst.getDate())} ${p2(jst.getHours())}:${p2(jst.getMinutes())}（${wdJst}）· 日本时间`,
+        station: 'TOKYO MX',
+        source: 'bangumi-data',
+        finished: finished,
+        finished_text: '已完结',
+        end_text: finished ? '最后一集 06-28 16:00（周日）· 北京时间' : '',
+        tip: finished
+          ? `已完结：最后一集 06-28 16:00（周日）· 北京时间\n电视台：TOKYO MX\n数据来源：bangumi-data（每天刷新）`
+          : `下次更新：${d.getFullYear()}-${mmdd}（${wd}） · 北京时间\n日本时间：${p2(jst.getMonth() + 1)}-${p2(jst.getDate())} ${p2(jst.getHours())}:${p2(jst.getMinutes())}（${wdJst}）\n电视台：TOKYO MX\n数据来源：bangumi-data（每天刷新）`,
+      };
+    }
+  });
+
+  const resources = [
+    { source: 'dmhy', source_name: '动漫花园', title: '[桜都字幕组] / Spy x Family (2025) [13][1080p][简体内嵌]间谍过家家第三季',
+      group: '桜都字幕组', team_id: '619', resolution: '1080p', lang: 'chs', size_text: '384.2MB', size_bytes: 402900000,
+      seeders: 1204, leechers: 32, published: '2026/08/28 05:32', episode: 13, episode_end: 13,
+      is_batch: false, is_noise: false, magnet: 'magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    { source: 'dmhy', source_name: '动漫花园', title: '[桜都字幕组] / Spy x Family (2025) [13][1080p][简繁内封]间谍过家家第三季',
+      group: '桜都字幕组', team_id: '619', resolution: '1080p', lang: 'both', size_text: '543.3MB', size_bytes: 569700000,
+      seeders: 486, leechers: 12, published: '2026/08/28 05:35', episode: 13, episode_end: 13,
+      is_batch: false, is_noise: false, magnet: 'magnet:?xt=urn:btih:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
+    { source: 'kisssub', source_name: '爱恋动漫', title: '[爱恋字幕社] 间谍过家家 第三季 - 12 [1080p][繁日內嵌]',
+      group: '爱恋字幕社', team_id: '', resolution: '1080p', lang: 'cht', size_text: '515.1MB', size_bytes: 540200000,
+      seeders: 86, leechers: 5, published: '2026/08/21', episode: 12, episode_end: 12,
+      is_batch: false, is_noise: false, magnet: 'magnet:?xt=urn:btih:cccccccccccccccccccccccccccccccccccccccc' },
+    { source: 'nyaa', source_name: 'Nyaa', title: '[SubsPlease] Spy x Family S03E13 (1080p) [A1B2C3D4].mkv',
+      group: 'SubsPlease', team_id: '', resolution: '1080p', lang: '', size_text: '1.4GiB', size_bytes: 1503238553,
+      seeders: 711, leechers: 20, published: '2026-08-28 15:00', episode: 13, episode_end: 13,
+      is_batch: false, is_noise: false, magnet: 'magnet:?xt=urn:btih:dddddddddddddddddddddddddddddddddddddddd' },
+    { source: 'dmhy', source_name: '动漫花园', title: '[沸班亚马制作组] 间谍过家家 第三季 [01-13Fin][1080p][简繁内封]',
+      group: '沸班亚马制作组', team_id: '861', resolution: '1080p', lang: 'both', size_text: '5.8GB', size_bytes: 6227702579,
+      seeders: 42, leechers: 3, published: '2026/08/30 11:02', episode: 1, episode_end: 13,
+      is_batch: true, is_noise: false, magnet: 'magnet:?xt=urn:btih:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+    { source: 'dmhy', source_name: '动漫花园', title: '[云光字幕组] 间谍过家家 第三季 - 11 [1080p][简日双语]',
+      group: '云光字幕组', team_id: '649', resolution: '1080p', lang: 'both', size_text: '498.0MB', size_bytes: 522200000,
+      seeders: 9, leechers: 1, published: '2026/08/14 20:10', episode: 11, episode_end: 11,
+      is_batch: false, is_noise: false, magnet: 'magnet:?xt=urn:btih:ffffffffffffffffffffffffffffffffffffffff' },
+    { source: 'nyaa', source_name: 'Nyaa', title: '[Erai-raws] Spy x Family - 13 [1080p][MultiSub]',
+      group: 'Erai-raws', team_id: '', resolution: '1080p', lang: 'both', size_text: '864.6MiB', size_bytes: 906600000,
+      seeders: 284, leechers: 8, published: '2026-08-28 16:40', episode: 13, episode_end: 13,
+      is_batch: false, is_noise: false, magnet: 'magnet:?xt=urn:btih:1111111111111111111111111111111111111111' },
+    { source: 'kisssub', source_name: '爱恋动漫', title: '[爱恋&猫恋汉化组] 间谍过家家 第三季 第12话 [1080p][简繁]',
+      group: '爱恋&猫恋汉化组', team_id: '', resolution: '1080p', lang: 'both', size_text: '520.4MB', size_bytes: 545700000,
+      seeders: 63, leechers: 2, published: '2026/08/22', episode: 12, episode_end: 12,
+      is_batch: false, is_noise: false, magnet: 'magnet:?xt=urn:btih:2222222222222222222222222222222222222222' }
+  ];
+
+  const subscription = {
+    subject_id: 498378, name: '间谍过家家 第三季', name_original: 'SPY×FAMILY Season 3',
+    cover: '', group: '桜都字幕组', team_id: '619', resolution: '1080p',
+    folder: 'D:\\Anime\\间谍过家家 第三季', total_episodes: 13, last_episode: 13,
+    enabled: true, primed: true, initial_mode: 'latest', downloaded_count: 13,
+    downloaded: { aaaa: '[桜都字幕组] [13][1080p][简体内嵌]', bbbb: '[桜都字幕组] [12][1080p]' },
+    history: [
+      { time: now - 3600, title: '[桜都字幕组] / Spy x Family (2025) [13][1080p][简体内嵌]', source: '动漫花园',
+        group: '桜都字幕组', resolution: '1080p', size: '384.2MB', episode: 13, reason: '自动追番' },
+      { time: now - 90000, title: '[桜都字幕组] / Spy x Family (2025) [12][1080p][简繁内封]', source: '动漫花园',
+        group: '桜都字幕组', resolution: '1080p', size: '543.3MB', episode: 12, reason: '加入订阅时下载' }
+    ],
+    created_at: now - 200000, last_check: now - 1800, last_result: '新增 1 集', last_new: 1,
+    aliases: ['间谍过家家 第三季'], folder_exists: true,
+    // 待下载队列（qBittorrent 掉线期间攒下的集数）：卡片上要能提示「待下载 N 集」
+    pending_count: 2, pending_episodes: [14, 15],
+    // 下次更新（后端 core/airtimes.py 提供；悬浮说明里含日本时间/电视台/来源）
+    airtime: (() => {
+      const next = now + 2 * 3600;
+      const aired = now - 20 * 3600;                    // 20 小时前更新过（侧栏「最近更新」用）
+      const d = new Date(next * 1000), jst = new Date((next + 3600) * 1000);
+      const da = new Date(aired * 1000);
+      const p2 = (n) => String(n).padStart(2, '0');
+      const wd = '周' + '日一二三四五六'[d.getDay()];
+      const wdJ = '周' + '日一二三四五六'[jst.getDay()];
+      const wdA = '周' + '日一二三四五六'[da.getDay()];
+      const md = `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+      const mda = `${p2(da.getMonth() + 1)}-${p2(da.getDate())} ${p2(da.getHours())}:${p2(da.getMinutes())}`;
+      return { next_ts: next, next_text: `${md}（${wd}）`,
+               next_full: `${d.getFullYear()}-${md}（${wd}）`,
+               jst_text: `${p2(jst.getMonth() + 1)}-${p2(jst.getDate())} ${p2(jst.getHours())}:${p2(jst.getMinutes())}（${wdJ}）· 日本时间`,
+               aired_ts: aired, aired_text: mda, episode_no: 13,
+               aired_full: `${da.getFullYear()}-${mda}（${wdA}）· 北京时间`,
+               station: 'TOKYO MX', source: 'bangumi-data', finished: false, finished_text: '已完结',
+               tip: `已更新：第 13 集 · ${da.getFullYear()}-${mda}（${wdA}）· 北京时间\n下次更新：${d.getFullYear()}-${md}（${wd}） · 北京时间\n电视台：TOKYO MX\n数据来源：bangumi-data（每天刷新）` };
+    })(),
+  };
+
+  // ---- 待下载队列（qBittorrent 掉线期间攒下的）----
+  // 可变：点「立即补下载」/ 侧栏那一行时 mock 会把队列清空，用来验证「恢复后提示」
+  let queueItems = [
+    { id: 'q1', subject_id: 498378, name: '间谍过家家 第三季', episode: 14,
+      title: '[桜都字幕组] / Spy x Family [14][1080p][简体内嵌]', group: '桜都字幕组',
+      source: '动漫花园', size: '384.2MB', reason: '自动追番', created: now - 3000,
+      attempts: 3, last_error: '无法连接 qBittorrent（http://127.0.0.1:8080）', last_try: now - 60 },
+    { id: 'q2', subject_id: 498378, name: '间谍过家家 第三季', episode: 15,
+      title: '[桜都字幕组] / Spy x Family [15][1080p][简体内嵌]', group: '桜都字幕组',
+      source: '动漫花园', size: '390.1MB', reason: '自动追番', created: now - 1500,
+      attempts: 1, last_error: '无法连接 qBittorrent（http://127.0.0.1:8080）', last_try: now - 60 }
+  ];
+  let queueRecovered = 0;
+  function queueState() {
+    return {
+      count: queueItems.length,
+      subjects: new Set(queueItems.map(i => i.subject_id)).size,
+      items: queueItems.slice(),
+      last_error: queueItems.length ? queueItems[queueItems.length - 1].last_error : '',
+      last_error_at: queueItems.length ? now - 60 : 0,
+      last_try: now - 60, last_ok: queueRecovered || 0, recovered_at: queueRecovered,
+      flushed_total: queueRecovered ? 2 : 0,
+      oldest: queueItems.length ? queueItems[0].created : 0
+    };
+  }
+
+  const responses = {
+    '/api/status': {
+      ok: true, version: '1.2', token_set: true,
+      token_url: 'https://next.bgm.tv/demo/access-token',
+      qb: { ok: true, base_url: 'http://127.0.0.1:8080', version: 'v5.2.1.10',
+            webapi_version: '2.15.1', default_save_path: 'D:\\Anime', listen_port: 43420,
+            categories: ['Bangumi'] },
+      proxy: { enabled: true, url: 'http://127.0.0.1:7890', for_bangumi: true, for_sources: true, qb_proxied: false },
+      download_root: 'D:\\Anime',
+      sources: [
+        { id: 'dmhy', name: '动漫花园', enabled: true, base: 'https://share.dmhy.org', priority: 1 },
+        { id: 'kisssub', name: '爱恋动漫', enabled: true, base: 'https://www.kisssub.org', priority: 2 },
+        { id: 'nyaa', name: 'Nyaa', enabled: true, base: 'https://nyaa.si', priority: 3 }
+      ],
+      watcher: { running: false, enabled: true, interval_minutes: 30, next_run: now + 900,
+                 subscriptions: 1, last_run: now - 1800, last_summary: '检查 1 部，下载 1 集' },
+      queue: queueState(),
+      subscriptions: 1
+    },
+    '/api/config': {
+      version: 1, bangumi_token: 'mocktoken1234567890', token_url: 'https://next.bgm.tv/demo/access-token',
+      server: { host: '127.0.0.1', port: 7788, allow_lan: false, open_browser_on_start: true },
+      proxy: { enabled: true, url: 'http://127.0.0.1:7890', for_bangumi: true, for_sources: true },
+      qbittorrent: { base_url: 'http://127.0.0.1:8080', username: 'admin', password: '',
+                     category: 'Bangumi', tags: '自动追番' },
+      sources: [
+        { id: 'dmhy', name: '动漫花园', enabled: true, base: 'https://share.dmhy.org', priority: 1 },
+        { id: 'kisssub', name: '爱恋动漫', enabled: true, base: 'https://www.kisssub.org', priority: 2 },
+        { id: 'nyaa', name: 'Nyaa', enabled: true, base: 'https://nyaa.si', priority: 3 }
+      ],
+      download: { root: 'D:\\Anime', preferred_resolution: '1080p', min_seeders: 0 },
+      subscription: { enabled: true, interval_minutes: 30, initial_mode: 'latest',
+                      max_episodes_per_round: 3, search_group_first: true },
+      data_dir: 'C:\\app\\data', config_path: 'C:\\app\\data\\config.json'
+    },
+    '/api/bangumi/collections': { ok: true, total: subjects.length, items: subjects },
+    '/api/search': {
+      ok: true,
+      subject: subjects[0],
+      strategy: '字幕组+番剧名（搜不到自动回退番剧名）',
+      elapsed: 4.2,
+      keywords_used: { dmhy: ['桜都字幕组 + 间谍过家家 第三季'], kisssub: ['爱恋字幕社 + 间谍过家家 第三季'], nyaa: ['SubsPlease + Spy x Family'] },
+      source_status: {
+        dmhy: { id: 'dmhy', name: '动漫花园', ok: true, error: '', count: 42 },
+        kisssub: { id: 'kisssub', name: '爱恋动漫', ok: true, error: '', count: 21 },
+        nyaa: { id: 'nyaa', name: 'Nyaa', ok: true, error: '', count: 22 }
+      },
+      groups: ['桜都字幕组', '沸班亚马制作组', '云光字幕组', 'SubsPlease', '爱恋字幕社', 'ToonsHub'],
+      total: resources.length, items: resources
+    },
+    '/api/groups': {
+      ok: true, total: 8, by_source: true,
+      status: { dmhy: { id: 'dmhy', name: '动漫花园', ok: true, count: 42 } },
+      // 与后端 by_source=true 一致：按资源站分开，value = "source::组名"
+      // 特意放了 dmhy/kisssub 各一条 ANi ——用户反馈的正是「两个站的 ANi 被合并」的场景
+      groups: [
+        { name: '桜都字幕组', source: 'dmhy', source_name: '动漫花园', count: 42, team_id: '619', value: 'dmhy::桜都字幕组', sources: ['动漫花园'] },
+        { name: 'ANi', source: 'dmhy', source_name: '动漫花园', count: 1, team_id: '816', value: 'dmhy::ANi', sources: ['动漫花园'] },
+        { name: '云光字幕组', source: 'dmhy', source_name: '动漫花园', count: 14, team_id: '649', value: 'dmhy::云光字幕组', sources: ['动漫花园'] },
+        { name: '沸班亚马制作组', source: 'dmhy', source_name: '动漫花园', count: 21, team_id: '861', value: 'dmhy::沸班亚马制作组', sources: ['动漫花园'] },
+        { name: '爱恋字幕社', source: 'kisssub', source_name: '爱恋动漫', count: 12, team_id: '', value: 'kisssub::爱恋字幕社', sources: ['爱恋动漫'] },
+        { name: 'ANi', source: 'kisssub', source_name: '爱恋动漫', count: 1, team_id: '', value: 'kisssub::ANi', sources: ['爱恋动漫'] },
+        { name: 'SubsPlease', source: 'nyaa', source_name: 'Nyaa', count: 22, team_id: '', value: 'nyaa::SubsPlease', sources: ['Nyaa'] },
+        { name: 'ToonsHub', source: 'nyaa', source_name: 'Nyaa', count: 12, team_id: '', value: 'nyaa::ToonsHub', sources: ['Nyaa'] }
+      ]
+    },
+    '/api/subscriptions': {
+      ok: true, items: [subscription],
+      status: { running: false, enabled: true, interval_minutes: 30, next_run: now + 900,
+                subscriptions: 1, last_run: now - 1800, last_summary: '检查 1 部，下载 1 集' },
+      queue: queueState()
+    },
+    '/api/queue': { ok: true, ...queueState() },
+    '/api/qb/folders': {
+      ok: true, root: 'D:\\Anime', root_exists: true,
+      folders: [
+        { name: '间谍过家家 第三季', path: 'D:\\Anime\\间谍过家家 第三季', size: '12.40 GB' },
+        { name: '药屋少女的呢喃 第三季', path: 'D:\\Anime\\药屋少女的呢喃 第三季', size: '8.20 GB' },
+        { name: '尼古喵喵', path: 'D:\\Anime\\尼古喵喵', size: '3.10 GB' }
+      ]
+    },
+    '/api/logs': { ok: true, lines: [
+      '2026-10-04 16:20:01 [INFO ] 自动追番后台线程已启动',
+      '2026-10-04 16:20:02 [INFO ] qBittorrent 已连接：v5.2.1.10（WebAPI 2.15.1），默认目录 D:\\Anime',
+      '2026-10-04 16:20:02 [INFO ] Bangumi 已登录：demo_user',
+      '2026-10-04 16:35:10 [INFO ] 已添加下载：[桜都字幕组] / Spy x Family [13][1080p] → D:\\Anime\\间谍过家家 第三季',
+      '2026-10-04 16:35:12 [INFO ] 追番检查完成：检查 1 部，下载 1 集'
+    ] }
+  };
+
+  const realFetch = window.fetch.bind(window);
+  window.__calls = [];                       // 记录所有请求，供测试断言提交内容
+  window.fetch = function (input, init) {
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    const path = url.split('?')[0];
+    let sent = null;
+    try { sent = init && init.body ? JSON.parse(init.body) : null; } catch (e) { sent = null; }
+    window.__calls.push({ path, method: (init && init.method) || 'GET', body: sent });
+    if (path.startsWith('/api/cover')) {
+      // 用内联 SVG 当封面图
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400">
+        <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#2b2721"/><stop offset="1" stop-color="#6b6152"/></linearGradient></defs>
+        <rect width="300" height="400" fill="url(#g)"/>
+        <text x="150" y="205" font-size="34" fill="#f4efe3" text-anchor="middle" font-family="sans-serif">番剧封面</text>
+      </svg>`;
+      return Promise.resolve(new Response(svg, { status: 200, headers: { 'Content-Type': 'image/svg+xml' } }));
+    }
+    if (path === '/api/qb/test') {
+      return Promise.resolve(json({ ok: true, base_url: 'http://127.0.0.1:8080', version: 'v5.2.1.10',
+        webapi_version: '2.15.1', default_save_path: 'D:\\Anime', listen_port: 43420, categories: ['Bangumi'] }));
+    }
+    if (path === '/api/subscriptions/check-all') {
+      return Promise.resolve(json({ ok: true, result: { checked: 1, downloaded: 1, elapsed: 6.2,
+        details: [{ subject_id: 498378, name: '间谍过家家 第三季', found: 42, downloaded: 1 }] } }));
+    }
+    // 待下载队列：补下载 / 删除（mock 里点一下就「qBittorrent 恢复」，队列清空）
+    if (path === '/api/queue/flush') {
+      const n = queueItems.length;
+      queueItems = [];
+      queueRecovered = now;
+      subscription.pending_count = 0;
+      subscription.pending_episodes = [];
+      return Promise.resolve(json({ ok: true, flushed: n, remaining: 0, queue: queueState() }));
+    }
+    if (path === '/api/queue/delete') {
+      const id = (sent && sent.id) || '';
+      queueItems = queueItems.filter(i => i.id !== id);
+      subscription.pending_count = queueItems.length;
+      subscription.pending_episodes = queueItems.map(i => i.episode);
+      return Promise.resolve(json({ ok: true, removed: 1, queue: queueState() }));
+    }
+    if (responses[path] !== undefined) {
+      // 队列是会变的（点补下载后清空），所以队列相关的响应要**现算**，不能用建表时的快照
+      const body = responses[path];
+      if (path === '/api/status' || path === '/api/subscriptions') {
+        body.queue = queueState();
+        if (path === '/api/subscriptions') {
+          body.items = [{ ...subscription, pending_count: queueItems.length,
+                          pending_episodes: queueItems.map(i => i.episode) }];
+        }
+      }
+      return Promise.resolve(json(body));
+    }
+    // 其它写操作一律返回成功，便于截图各种状态
+    return Promise.resolve(json({ ok: true, subscription, downloaded_now: true, error: '',
+      user: { id: 100000, nickname: 'demo_user', username: '100000' } }));
+  };
+
+  function json(obj) {
+    return new Response(JSON.stringify(obj), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+  window.__MOCK_READY__ = true;
+})();
+</script>
+<script src="../app/web/ui.js"></script>
+<script src="../app/web/app.js"></script>
+<script>
+/* 截图/测量辅助：暴露给 CDP 调用 */
+window.__probe = {
+  /* 按番剧 id 找卡片：优先 data-subject-id，缺失时按标题文本兜底 */
+  _card: function (subjectId) {
+    const id = String(subjectId);
+    let card = [...document.querySelectorAll('#anime-grid .card')]
+      .find(c => c.dataset.subjectId === id || c.dataset.id === id);
+    if (card) return card;
+    const want = { '498378': '间谍过家家', '586255': '僵尸搜寻中',
+                   '513878': '赛博朋克', '568244': '药屋少女' }[id];
+    if (!want) return null;
+    return [...document.querySelectorAll('#anime-grid .card')]
+      .find(c => (c.textContent || '').includes(want)) || null;
+  },
+  openModal: function (subjectId) {
+    const card = subjectId ? window.__probe._card(subjectId)
+                           : document.querySelector('#anime-grid .card');
+    if (card) card.click();
+    return !!card;
+  },
+  switchView: function (name) {
+    const btn = document.querySelector(`.nav-item[data-view="${name}"]`);
+    if (btn) btn.click();
+    return !!btn;
+  },
+  switchTab: function (name) {
+    const tab = document.querySelector(`#m-tabs .tab[data-tab="${name}"]`);
+    if (tab) tab.click();
+    return !!tab;
+  },
+  ready: function () {
+    return {
+      appReady: document.body.classList.contains('app-ready'),
+      cards: document.querySelectorAll('#anime-grid .card').length,
+      rows: document.querySelectorAll('#res-body tr').length,
+      groups: document.querySelectorAll('#group-list > *').length,
+      subs: document.querySelectorAll('#sub-list > *').length
+    };
+  },
+  setChecked: function (subjectId, on) {
+    const card = window.__probe._card(subjectId);
+    if (!card) return false;
+    const box = card.querySelector('input[type=checkbox]');
+    if (!box) return false;
+    if (box.checked !== !!on) { box.checked = !!on; box.dispatchEvent(new Event('change', { bubbles: true })); }
+    return true;
+  },
+  calls: function (path, method) {
+    return (window.__calls || []).filter(c => c.path === path && (!method || c.method === method));
+  },
+  clearCalls: function () { window.__calls = []; },
+  click: function (id) {
+    const el = document.getElementById(id);
+    if (el) { el.click(); return true; }
+    return false;
+  },
+  selectOption: function (id, value) {
+    const sel = document.getElementById(id);
+    if (!sel) return false;
+    const opt = [...sel.options].find(o => o.value === value);
+    if (!opt) return false;
+    sel.value = value;
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  },
+  options: function (id) {
+    const sel = document.getElementById(id);
+    return sel ? [...sel.options].map(o => ({ v: o.value, t: o.textContent.trim() })) : null;
+  }
+};
+</script>
+</body>
+</html>

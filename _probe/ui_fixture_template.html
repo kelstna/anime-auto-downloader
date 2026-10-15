@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<title>UI 测试页（mock 数据）</title>
+<link rel="stylesheet" href="../app/web/styles.css">
+<style>
+  /* 仅测试页使用：标注区域，方便截图核对 */
+  .probe-note { font-size: 11px; color: var(--text-3); padding: 4px 0 0 2px; }
+</style>
+</head>
+<body>
+<script>
+/* 截图/验收用：?theme=light|dark 强制主题（只影响这个 mock 页，产品逻辑不变） */
+(function () {
+  try {
+    var forced = new URLSearchParams(location.search).get('theme');
+    if (forced === 'light' || forced === 'dark') localStorage.setItem('anime-auto-dl-theme', forced);
+    else localStorage.removeItem('anime-auto-dl-theme');
+  } catch (e) { /* 忽略 */ }
+})();
+</script>
+<!-- 与 index.html 完全一致的结构（由构建脚本从 index.html 抽取） -->
+__BODY__
+
+<script>
+/* =========================================================================
+ * mock 层：替换 window.fetch，让 app.js 在无后端情况下渲染完整界面
+ * ========================================================================= */
+(function () {
+  const now = Date.now() / 1000;
+
+  const subjects = [
+    { id: 498378, name: 'SPY×FAMILY Season 3', name_cn: '间谍过家家 第三季',
+      summary: '间谍过家家第三季。', cover: '', date: '2025-10-04', eps: 13, total_episodes: 13,
+      score: 7.3, rank: 1441, collect_type: 3, ep_status: 13, subscribed: true,
+      aliases: ['间谍过家家 第三季', '間谍过家家 第三季', 'SPY x FAMILY', 'Spy x Family Season 3'] },
+    { id: 568244, name: '薬屋のひとりごと 第3期', name_cn: '药屋少女的呢喃 第三季',
+      summary: '', cover: '', date: '2025-10-22', eps: 12, total_episodes: 12,
+      score: 8.1, rank: 210, collect_type: 3, ep_status: 4, subscribed: false,
+      aliases: ['药屋少女的呢喃 第三季', '藥屋少女的呢喃 第三季', 'Kusuriya no Hitorigoto'] },
+    { id: 586255, name: 'ゾンビさがしてます', name_cn: '僵尸搜寻中',
+      summary: '', cover: '', date: '2026-10-03', eps: 12, total_episodes: 12,
+      score: 6.4, rank: 3021, collect_type: 3, ep_status: 1, subscribed: false,
+      aliases: ['僵尸搜寻中', '#ゾンビさがしてます'] },
+    { id: 513878, name: 'Cyberpunk: Edgerunners 2', name_cn: '赛博朋克：边缘行者 2',
+      summary: '', cover: '', date: '2026-10-20', eps: 10, total_episodes: 10,
+      score: 8.9, rank: 88, collect_type: 3, ep_status: 0, subscribed: false,
+      aliases: ['赛博朋克：边缘行者 2', 'Cyberpunk: Edgerunners 2'] },
+    { id: 639938, name: 'スティール・ボール・ラン', name_cn: '飙马野郎 JOJO的奇妙冒险 第二&第三赛段',
+      summary: '', cover: '', date: '2026-03-21', eps: 11, total_episodes: 11,
+      score: 9.2, rank: 15, collect_type: 3, ep_status: 11, subscribed: false,
+      aliases: ['飙马野郎', 'STEEL BALL RUN', 'JoJo no Kimyou na Bouken'] },
+    { id: 361095, name: 'ゴールデンカムイ 第四期', name_cn: '黄金神威 第四季',
+      summary: '', cover: '', date: '2026-01-10', eps: 14, total_episodes: 14,
+      score: 8.6, rank: 120, collect_type: 3, ep_status: 14, subscribed: false,
+      aliases: ['黄金神威 第四季', 'Golden Kamuy'] }
+  ];
+
+  // 与后端 Subject.to_dict() 保持一致：补齐 display_name / traditional_name / english_name
+  // 并补上资源缓存字段（后端 /api/bangumi/collections 会返回），用于验证卡片标记
+  subjects.forEach((s, i) => {
+    s.display_name = s.name_cn || s.name || `subject-${s.id}`;
+    s.traditional_name = s.name_cn || s.name || '';
+    s.english_name = s.aliases.find((a) => /^[\x00-\x7F]+$/.test(a)) || '';
+    s.resources_cached = i % 3 !== 1;                 // 大部分番剧已预热
+    s.resources_cached_count = s.resources_cached ? (12 + i * 31) : 0;
+    s.resources_cached_age = s.resources_cached ? (60 + i * 240) : null;
+    // 下次更新（后端 core/airtimes.py 会按 bangumi-data 算好这些字段）
+    if (i !== 3) {                                    // 留一部没有数据，验证「没有就不占位」
+      const soon = i === 0;                            // 第一部设为「即将更新」验证高亮
+      const finished = i === 5;                        // 最后一部设为「已完结」验证替换文案
+      const next = Math.floor(Date.now() / 1000) + (soon ? 2 * 3600 : (i + 1) * 24 * 3600);
+      const d = new Date(next * 1000);
+      const wd = '周' + '日一二三四五六'[d.getDay()];
+      const jst = new Date((next + 3600) * 1000);
+      const wdJst = '周' + '日一二三四五六'[jst.getDay()];
+      const p2 = (n) => String(n).padStart(2, '0');
+      const mmdd = `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+      s.airtime = {
+        next_ts: next,
+        next_text: `${mmdd}（${wd}）`,
+        next_full: `${d.getFullYear()}-${mmdd}（${wd}）`,
+        jst_text: `${p2(jst.getMonth() + 1)}-${p2(jst.getDate())} ${p2(jst.getHours())}:${p2(jst.getMinutes())}（${wdJst}）· 日本时间`,
+        station: 'TOKYO MX',
+        source: 'bangumi-data',
+        finished: finished,
+        finished_text: '已完结',
+        end_text: finished ? '最后一集 06-28 16:00（周日）· 北京时间' : '',
+        tip: finished
+          ? `已完结：最后一集 06-28 16:00（周日）· 北京时间\n电视台：TOKYO MX\n数据来源：bangumi-data（每天刷新）`
+          : `下次更新：${d.getFullYear()}-${mmdd}（${wd}） · 北京时间\n日本时间：${p2(jst.getMonth() + 1)}-${p2(jst.getDate())} ${p2(jst.getHours())}:${p2(jst.getMinutes())}（${wdJst}）\n电视台：TOKYO MX\n数据来源：bangumi-data（每天刷新）`,
+      };
+    }
+  });
+
+  const resources = [
+    { source: 'dmhy', source_name: '动漫花园', title: '[桜都字幕组] / Spy x Family (2025) [13][1080p][简体内嵌]间谍过家家第三季',
+      group: '桜都字幕组', team_id: '619', resolution: '1080p', lang: 'chs', size_text: '384.2MB', size_bytes: 402900000,
+      seeders: 1204, leechers: 32, published: '2026/08/28 05:32', episode: 13, episode_end: 13,
+      is_batch: false, is_noise: false, magnet: 'magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    { source: 'dmhy', source_name: '动漫花园', title: '[桜都字幕组] / Spy x Family (2025) [13][1080p][简繁内封]间谍过家家第三季',
+      group: '桜都字幕组', team_id: '619', resolution: '1080p', lang: 'both', size_text: '543.3MB', size_bytes: 569700000,
+      seeders: 486, leechers: 12, published: '2026/08/28 05:35', episode: 13, episode_end: 13,
+      is_batch: false, is_noise: false, magnet: 'magnet:?xt=urn:btih:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
+    { source: 'kisssub', source_name: '爱恋动漫', title: '[爱恋字幕社] 间谍过家家 第三季 - 12 [1080p][繁日內嵌]',
+      group: '爱恋字幕社', team_id: '', resolution: '1080p', lang: 'cht', size_text: '515.1MB', size_bytes: 540200000,
+      seeders: 86, leechers: 5, published: '2026/08/21', episode: 12, episode_end: 12,
+      is_batch: false, is_noise: false, magnet: 'magnet:?xt=urn:btih:cccccccccccccccccccccccccccccccccccccccc' },
+    { source: 'nyaa', source_name: 'Nyaa', title: '[SubsPlease] Spy x Family S03E13 (1080p) [A1B2C3D4].mkv',
+      group: 'SubsPlease', team_id: '', resolution: '1080p', lang: '', size_text: '1.4GiB', size_bytes: 1503238553,
+      seeders: 711, leechers: 20, published: '2026-08-28 15:00', episode: 13, episode_end: 13,
+      is_batch: false, is_noise: false, magnet: 'magnet:?xt=urn:btih:dddddddddddddddddddddddddddddddddddddddd' },
+    { source: 'dmhy', source_name: '动漫花园', title: '[沸班亚马制作组] 间谍过家家 第三季 [01-13Fin][1080p][简繁内封]',
+      group: '沸班亚马制作组', team_id: '861', resolution: '1080p', lang: 'both', size_text: '5.8GB', size_bytes: 6227702579,
+      seeders: 42, leechers: 3, published: '2026/08/30 11:02', episode: 1, episode_end: 13,
+      is_batch: true, is_noise: false, magnet: 'magnet:?xt=urn:btih:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+    { source: 'dmhy', source_name: '动漫花园', title: '[云光字幕组] 间谍过家家 第三季 - 11 [1080p][简日双语]',
+      group: '云光字幕组', team_id: '649', resolution: '1080p', lang: 'both', size_text: '498.0MB', size_bytes: 522200000,
+      seeders: 9, leechers: 1, published: '2026/08/14 20:10', episode: 11, episode_end: 11,
+      is_batch: false, is_noise: false, magnet: 'magnet:?xt=urn:btih:ffffffffffffffffffffffffffffffffffffffff' },
+    { source: 'nyaa', source_name: 'Nyaa', title: '[Erai-raws] Spy x Family - 13 [1080p][MultiSub]',
+      group: 'Erai-raws', team_id: '', resolution: '1080p', lang: 'both', size_text: '864.6MiB', size_bytes: 906600000,
+      seeders: 284, leechers: 8, published: '2026-08-28 16:40', episode: 13, episode_end: 13,
+      is_batch: false, is_noise: false, magnet: 'magnet:?xt=urn:btih:1111111111111111111111111111111111111111' },
+    { source: 'kisssub', source_name: '爱恋动漫', title: '[爱恋&猫恋汉化组] 间谍过家家 第三季 第12话 [1080p][简繁]',
+      group: '爱恋&猫恋汉化组', team_id: '', resolution: '1080p', lang: 'both', size_text: '520.4MB', size_bytes: 545700000,
+      seeders: 63, leechers: 2, published: '2026/08/22', episode: 12, episode_end: 12,
+      is_batch: false, is_noise: false, magnet: 'magnet:?xt=urn:btih:2222222222222222222222222222222222222222' }
+  ];
+
+  const subscription = {
+    subject_id: 498378, name: '间谍过家家 第三季', name_original: 'SPY×FAMILY Season 3',
+    cover: '', group: '桜都字幕组', team_id: '619', resolution: '1080p',
+    folder: 'D:\\Anime\\间谍过家家 第三季', total_episodes: 13, last_episode: 13,
+    enabled: true, primed: true, initial_mode: 'latest', downloaded_count: 13,
+    downloaded: { aaaa: '[桜都字幕组] [13][1080p][简体内嵌]', bbbb: '[桜都字幕组] [12][1080p]' },
+    history: [
+      { time: now - 3600, title: '[桜都字幕组] / Spy x Family (2025) [13][1080p][简体内嵌]', source: '动漫花园',
+        group: '桜都字幕组', resolution: '1080p', size: '384.2MB', episode: 13, reason: '自动追番' },
+      { time: now - 90000, title: '[桜都字幕组] / Spy x Family (2025) [12][1080p][简繁内封]', source: '动漫花园',
+        group: '桜都字幕组', resolution: '1080p', size: '543.3MB', episode: 12, reason: '加入订阅时下载' }
+    ],
+    created_at: now - 200000, last_check: now - 1800, last_result: '新增 1 集', last_new: 1,
+    aliases: ['间谍过家家 第三季'], folder_exists: true,
+    // 待下载队列（qBittorrent 掉线期间攒下的集数）：卡片上要能提示「待下载 N 集」
+    pending_count: 2, pending_episodes: [14, 15],
+    // 下次更新（后端 core/airtimes.py 提供；悬浮说明里含日本时间/电视台/来源）
+    airtime: (() => {
+      const next = now + 2 * 3600;
+      const aired = now - 20 * 3600;                    // 20 小时前更新过（侧栏「最近更新」用）
+      const d = new Date(next * 1000), jst = new Date((next + 3600) * 1000);
+      const da = new Date(aired * 1000);
+      const p2 = (n) => String(n).padStart(2, '0');
+      const wd = '周' + '日一二三四五六'[d.getDay()];
+      const wdJ = '周' + '日一二三四五六'[jst.getDay()];
+      const wdA = '周' + '日一二三四五六'[da.getDay()];
+      const md = `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+      const mda = `${p2(da.getMonth() + 1)}-${p2(da.getDate())} ${p2(da.getHours())}:${p2(da.getMinutes())}`;
+      return { next_ts: next, next_text: `${md}（${wd}）`,
+               next_full: `${d.getFullYear()}-${md}（${wd}）`,
+               jst_text: `${p2(jst.getMonth() + 1)}-${p2(jst.getDate())} ${p2(jst.getHours())}:${p2(jst.getMinutes())}（${wdJ}）· 日本时间`,
+               aired_ts: aired, aired_text: mda, episode_no: 13,
+               aired_full: `${da.getFullYear()}-${mda}（${wdA}）· 北京时间`,
+               station: 'TOKYO MX', source: 'bangumi-data', finished: false, finished_text: '已完结',
+               tip: `已更新：第 13 集 · ${da.getFullYear()}-${mda}（${wdA}）· 北京时间\n下次更新：${d.getFullYear()}-${md}（${wd}） · 北京时间\n电视台：TOKYO MX\n数据来源：bangumi-data（每天刷新）` };
+    })(),
+  };
+
+  // ---- 待下载队列（qBittorrent 掉线期间攒下的）----
+  // 可变：点「立即补下载」/ 侧栏那一行时 mock 会把队列清空，用来验证「恢复后提示」
+  let queueItems = [
+    { id: 'q1', subject_id: 498378, name: '间谍过家家 第三季', episode: 14,
+      title: '[桜都字幕组] / Spy x Family [14][1080p][简体内嵌]', group: '桜都字幕组',
+      source: '动漫花园', size: '384.2MB', reason: '自动追番', created: now - 3000,
+      attempts: 3, last_error: '无法连接 qBittorrent（http://127.0.0.1:8080）', last_try: now - 60 },
+    { id: 'q2', subject_id: 498378, name: '间谍过家家 第三季', episode: 15,
+      title: '[桜都字幕组] / Spy x Family [15][1080p][简体内嵌]', group: '桜都字幕组',
+      source: '动漫花园', size: '390.1MB', reason: '自动追番', created: now - 1500,
+      attempts: 1, last_error: '无法连接 qBittorrent（http://127.0.0.1:8080）', last_try: now - 60 }
+  ];
+  let queueRecovered = 0;
+  function queueState() {
+    return {
+      count: queueItems.length,
+      subjects: new Set(queueItems.map(i => i.subject_id)).size,
+      items: queueItems.slice(),
+      last_error: queueItems.length ? queueItems[queueItems.length - 1].last_error : '',
+      last_error_at: queueItems.length ? now - 60 : 0,
+      last_try: now - 60, last_ok: queueRecovered || 0, recovered_at: queueRecovered,
+      flushed_total: queueRecovered ? 2 : 0,
+      oldest: queueItems.length ? queueItems[0].created : 0
+    };
+  }
+
+  const responses = {
+    '/api/status': {
+      ok: true, version: '1.2', token_set: true,
+      token_url: 'https://next.bgm.tv/demo/access-token',
+      qb: { ok: true, base_url: 'http://127.0.0.1:8080', version: 'v5.2.1.10',
+            webapi_version: '2.15.1', default_save_path: 'D:\\Anime', listen_port: 43420,
+            categories: ['Bangumi'] },
+      proxy: { enabled: true, url: 'http://127.0.0.1:7890', for_bangumi: true, for_sources: true, qb_proxied: false },
+      download_root: 'D:\\Anime',
+      sources: [
+        { id: 'dmhy', name: '动漫花园', enabled: true, base: 'https://share.dmhy.org', priority: 1 },
+        { id: 'kisssub', name: '爱恋动漫', enabled: true, base: 'https://www.kisssub.org', priority: 2 },
+        { id: 'nyaa', name: 'Nyaa', enabled: true, base: 'https://nyaa.si', priority: 3 }
+      ],
+      watcher: { running: false, enabled: true, interval_minutes: 30, next_run: now + 900,
+                 subscriptions: 1, last_run: now - 1800, last_summary: '检查 1 部，下载 1 集' },
+      queue: queueState(),
+      subscriptions: 1
+    },
+    '/api/config': {
+      version: 1, bangumi_token: 'mocktoken1234567890', token_url: 'https://next.bgm.tv/demo/access-token',
+      server: { host: '127.0.0.1', port: 7788, allow_lan: false, open_browser_on_start: true },
+      proxy: { enabled: true, url: 'http://127.0.0.1:7890', for_bangumi: true, for_sources: true },
+      qbittorrent: { base_url: 'http://127.0.0.1:8080', username: 'admin', password: '',
+                     category: 'Bangumi', tags: '自动追番' },
+      sources: [
+        { id: 'dmhy', name: '动漫花园', enabled: true, base: 'https://share.dmhy.org', priority: 1 },
+        { id: 'kisssub', name: '爱恋动漫', enabled: true, base: 'https://www.kisssub.org', priority: 2 },
+        { id: 'nyaa', name: 'Nyaa', enabled: true, base: 'https://nyaa.si', priority: 3 }
+      ],
+      download: { root: 'D:\\Anime', preferred_resolution: '1080p', min_seeders: 0 },
+      subscription: { enabled: true, interval_minutes: 30, initial_mode: 'latest',
+                      max_episodes_per_round: 3, search_group_first: true },
+      data_dir: 'C:\\app\\data', config_path: 'C:\\app\\data\\config.json'
+    },
+    '/api/bangumi/collections': { ok: true, total: subjects.length, items: subjects },
+    '/api/search': {
+      ok: true,
+      subject: subjects[0],
+      strategy: '字幕组+番剧名（搜不到自动回退番剧名）',
+      elapsed: 4.2,
+      keywords_used: { dmhy: ['桜都字幕组 + 间谍过家家 第三季'], kisssub: ['爱恋字幕社 + 间谍过家家 第三季'], nyaa: ['SubsPlease + Spy x Family'] },
+      source_status: {
+        dmhy: { id: 'dmhy', name: '动漫花园', ok: true, error: '', count: 42 },
+        kisssub: { id: 'kisssub', name: '爱恋动漫', ok: true, error: '', count: 21 },
+        nyaa: { id: 'nyaa', name: 'Nyaa', ok: true, error: '', count: 22 }
+      },
+      groups: ['桜都字幕组', '沸班亚马制作组', '云光字幕组', 'SubsPlease', '爱恋字幕社', 'ToonsHub'],
+      total: resources.length, items: resources
+    },
+    '/api/groups': {
+      ok: true, total: 8, by_source: true,
+      status: { dmhy: { id: 'dmhy', name: '动漫花园', ok: true, count: 42 } },
+      // 与后端 by_source=true 一致：按资源站分开，value = "source::组名"
+      // 特意放了 dmhy/kisssub 各一条 ANi ——用户反馈的正是「两个站的 ANi 被合并」的场景
+      groups: [
+        { name: '桜都字幕组', source: 'dmhy', source_name: '动漫花园', count: 42, team_id: '619', value: 'dmhy::桜都字幕组', sources: ['动漫花园'] },
+        { name: 'ANi', source: 'dmhy', source_name: '动漫花园', count: 1, team_id: '816', value: 'dmhy::ANi', sources: ['动漫花园'] },
+        { name: '云光字幕组', source: 'dmhy', source_name: '动漫花园', count: 14, team_id: '649', value: 'dmhy::云光字幕组', sources: ['动漫花园'] },
+        { name: '沸班亚马制作组', source: 'dmhy', source_name: '动漫花园', count: 21, team_id: '861', value: 'dmhy::沸班亚马制作组', sources: ['动漫花园'] },
+        { name: '爱恋字幕社', source: 'kisssub', source_name: '爱恋动漫', count: 12, team_id: '', value: 'kisssub::爱恋字幕社', sources: ['爱恋动漫'] },
+        { name: 'ANi', source: 'kisssub', source_name: '爱恋动漫', count: 1, team_id: '', value: 'kisssub::ANi', sources: ['爱恋动漫'] },
+        { name: 'SubsPlease', source: 'nyaa', source_name: 'Nyaa', count: 22, team_id: '', value: 'nyaa::SubsPlease', sources: ['Nyaa'] },
+        { name: 'ToonsHub', source: 'nyaa', source_name: 'Nyaa', count: 12, team_id: '', value: 'nyaa::ToonsHub', sources: ['Nyaa'] }
+      ]
+    },
+    '/api/subscriptions': {
+      ok: true, items: [subscription],
+      status: { running: false, enabled: true, interval_minutes: 30, next_run: now + 900,
+                subscriptions: 1, last_run: now - 1800, last_summary: '检查 1 部，下载 1 集' },
+      queue: queueState()
+    },
+    '/api/queue': { ok: true, ...queueState() },
+    '/api/qb/folders': {
+      ok: true, root: 'D:\\Anime', root_exists: true,
+      folders: [
+        { name: '间谍过家家 第三季', path: 'D:\\Anime\\间谍过家家 第三季', size: '12.40 GB' },
+        { name: '药屋少女的呢喃 第三季', path: 'D:\\Anime\\药屋少女的呢喃 第三季', size: '8.20 GB' },
+        { name: '尼古喵喵', path: 'D:\\Anime\\尼古喵喵', size: '3.10 GB' }
+      ]
+    },
+    '/api/logs': { ok: true, lines: [
+      '2026-10-04 16:20:01 [INFO ] 自动追番后台线程已启动',
+      '2026-10-04 16:20:02 [INFO ] qBittorrent 已连接：v5.2.1.10（WebAPI 2.15.1），默认目录 D:\\Anime',
+      '2026-10-04 16:20:02 [INFO ] Bangumi 已登录：demo_user',
+      '2026-10-04 16:35:10 [INFO ] 已添加下载：[桜都字幕组] / Spy x Family [13][1080p] → D:\\Anime\\间谍过家家 第三季',
+      '2026-10-04 16:35:12 [INFO ] 追番检查完成：检查 1 部，下载 1 集'
+    ] }
+  };
+
+  const realFetch = window.fetch.bind(window);
+  window.__calls = [];                       // 记录所有请求，供测试断言提交内容
+  window.fetch = function (input, init) {
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    const path = url.split('?')[0];
+    let sent = null;
+    try { sent = init && init.body ? JSON.parse(init.body) : null; } catch (e) { sent = null; }
+    window.__calls.push({ path, method: (init && init.method) || 'GET', body: sent });
+    if (path.startsWith('/api/cover')) {
+      // 用内联 SVG 当封面图
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400">
+        <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#2b2721"/><stop offset="1" stop-color="#6b6152"/></linearGradient></defs>
+        <rect width="300" height="400" fill="url(#g)"/>
+        <text x="150" y="205" font-size="34" fill="#f4efe3" text-anchor="middle" font-family="sans-serif">番剧封面</text>
+      </svg>`;
+      return Promise.resolve(new Response(svg, { status: 200, headers: { 'Content-Type': 'image/svg+xml' } }));
+    }
+    if (path === '/api/qb/test') {
+      return Promise.resolve(json({ ok: true, base_url: 'http://127.0.0.1:8080', version: 'v5.2.1.10',
+        webapi_version: '2.15.1', default_save_path: 'D:\\Anime', listen_port: 43420, categories: ['Bangumi'] }));
+    }
+    if (path === '/api/subscriptions/check-all') {
+      return Promise.resolve(json({ ok: true, result: { checked: 1, downloaded: 1, elapsed: 6.2,
+        details: [{ subject_id: 498378, name: '间谍过家家 第三季', found: 42, downloaded: 1 }] } }));
+    }
+    // 待下载队列：补下载 / 删除（mock 里点一下就「qBittorrent 恢复」，队列清空）
+    if (path === '/api/queue/flush') {
+      const n = queueItems.length;
+      queueItems = [];
+      queueRecovered = now;
+      subscription.pending_count = 0;
+      subscription.pending_episodes = [];
+      return Promise.resolve(json({ ok: true, flushed: n, remaining: 0, queue: queueState() }));
+    }
+    if (path === '/api/queue/delete') {
+      const id = (sent && sent.id) || '';
+      queueItems = queueItems.filter(i => i.id !== id);
+      subscription.pending_count = queueItems.length;
+      subscription.pending_episodes = queueItems.map(i => i.episode);
+      return Promise.resolve(json({ ok: true, removed: 1, queue: queueState() }));
+    }
+    if (responses[path] !== undefined) {
+      // 队列是会变的（点补下载后清空），所以队列相关的响应要**现算**，不能用建表时的快照
+      const body = responses[path];
+      if (path === '/api/status' || path === '/api/subscriptions') {
+        body.queue = queueState();
+        if (path === '/api/subscriptions') {
+          body.items = [{ ...subscription, pending_count: queueItems.length,
+                          pending_episodes: queueItems.map(i => i.episode) }];
+        }
+      }
+      return Promise.resolve(json(body));
+    }
+    // 其它写操作一律返回成功，便于截图各种状态
+    return Promise.resolve(json({ ok: true, subscription, downloaded_now: true, error: '',
+      user: { id: 100000, nickname: 'demo_user', username: '100000' } }));
+  };
+
+  function json(obj) {
+    return new Response(JSON.stringify(obj), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+  window.__MOCK_READY__ = true;
+})();
+</script>
+<script src="../app/web/ui.js"></script>
+<script src="../app/web/app.js"></script>
+<script>
+/* 截图/测量辅助：暴露给 CDP 调用 */
+window.__probe = {
+  /* 按番剧 id 找卡片：优先 data-subject-id，缺失时按标题文本兜底 */
+  _card: function (subjectId) {
+    const id = String(subjectId);
+    let card = [...document.querySelectorAll('#anime-grid .card')]
+      .find(c => c.dataset.subjectId === id || c.dataset.id === id);
+    if (card) return card;
+    const want = { '498378': '间谍过家家', '586255': '僵尸搜寻中',
+                   '513878': '赛博朋克', '568244': '药屋少女' }[id];
+    if (!want) return null;
+    return [...document.querySelectorAll('#anime-grid .card')]
+      .find(c => (c.textContent || '').includes(want)) || null;
+  },
+  openModal: function (subjectId) {
+    const card = subjectId ? window.__probe._card(subjectId)
+                           : document.querySelector('#anime-grid .card');
+    if (card) card.click();
+    return !!card;
+  },
+  switchView: function (name) {
+    const btn = document.querySelector(`.nav-item[data-view="${name}"]`);
+    if (btn) btn.click();
+    return !!btn;
+  },
+  switchTab: function (name) {
+    const tab = document.querySelector(`#m-tabs .tab[data-tab="${name}"]`);
+    if (tab) tab.click();
+    return !!tab;
+  },
+  ready: function () {
+    return {
+      appReady: document.body.classList.contains('app-ready'),
+      cards: document.querySelectorAll('#anime-grid .card').length,
+      rows: document.querySelectorAll('#res-body tr').length,
+      groups: document.querySelectorAll('#group-list > *').length,
+      subs: document.querySelectorAll('#sub-list > *').length
+    };
+  },
+  setChecked: function (subjectId, on) {
+    const card = window.__probe._card(subjectId);
+    if (!card) return false;
+    const box = card.querySelector('input[type=checkbox]');
+    if (!box) return false;
+    if (box.checked !== !!on) { box.checked = !!on; box.dispatchEvent(new Event('change', { bubbles: true })); }
+    return true;
+  },
+  calls: function (path, method) {
+    return (window.__calls || []).filter(c => c.path === path && (!method || c.method === method));
+  },
+  clearCalls: function () { window.__calls = []; },
+  click: function (id) {
+    const el = document.getElementById(id);
+    if (el) { el.click(); return true; }
+    return false;
+  },
+  selectOption: function (id, value) {
+    const sel = document.getElementById(id);
+    if (!sel) return false;
+    const opt = [...sel.options].find(o => o.value === value);
+    if (!opt) return false;
+    sel.value = value;
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  },
+  options: function (id) {
+    const sel = document.getElementById(id);
+    return sel ? [...sel.options].map(o => ({ v: o.value, t: o.textContent.trim() })) : null;
+  }
+};
+</script>
+</body>
+</html>

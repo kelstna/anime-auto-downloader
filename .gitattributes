@@ -1,0 +1,12 @@
+# 统一换行符，避免 Windows/Linux 协作时整文件 diff
+* text=auto
+*.py   text eol=lf
+*.md   text eol=lf
+*.html text eol=lf
+*.css  text eol=lf
+*.js   text eol=lf
+*.bat  text eol=crlf
+*.json text eol=lf
+# 抓下来的站点搜索页片段（离线解析测试用）：保持原样，不做换行转换，
+# 否则每次提交都会把整份 fixture 标成「全文件改动」
+tests/fixtures/*.html -text
