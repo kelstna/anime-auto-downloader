@@ -228,6 +228,33 @@ function airtimeFactItem(air) {
 }
 
 /**
+ * 「最近更新」用的数据：**自动追番自动添加的下载记录**。
+ *
+ * 数据来自 /api/subscriptions 里每条订阅的 history（watcher.download_resource 写的），
+ * 只保留系统自动挑的那些（自动追番 / 检查 / 加入订阅时 / 恢复补下载），
+ * 手动点资源行「下载」「补下载单集」的不算（reason 是「手动下载」/「手动补下载」）。
+ *
+ * windowHours 给定时只取这么多小时内的记录。
+ */
+const UPDATES_MANUAL_REASONS = new Set(['手动下载', '手动补下载']);
+
+function autoDownloadRows(windowHours) {
+  const now = Date.now() / 1000;
+  const rows = [];
+  (state.subs || []).forEach((sub) => {
+    (sub.history || []).forEach((item) => {
+      const ts = Number(item.time) || 0;
+      if (!ts || ts > now + 60) return;                    // 没有时间 / 未来时间，忽略
+      if (windowHours && now - ts > windowHours * 3600) return;
+      if (UPDATES_MANUAL_REASONS.has(String(item.reason || ''))) return;
+      rows.push({ sub, item, ts });
+    });
+  });
+  rows.sort((a, b) => b.ts - a.ts);
+  return rows;
+}
+
+/**
  * Bangumi 跳转小按钮（外链图标）。
  * 用在卡片封面右上角：玻璃拟态、和左上角的复选框对称，不抢封面画面（用户要求「注意美观」）。
  * 点它只开新标签页，不要触发卡片本身的「打开详情弹窗」。
@@ -3445,17 +3472,13 @@ function renderSidebarUpdates() {
 }
 
 /**
- * 「更多」弹窗：列出订阅里最近的更新（按最近一集的播出时间从新到旧，**最多 50 条**）。
- * 一条 = 一部订阅的最新一集（含已完结的，排在后面并标「已完结」）。
+ * 「更多」弹窗：列出**自动追番自动添加的下载**（按添加下载的时间从新到旧，**最多 50 条**）。
+ * 数据来自 autoDownloadRows()（每条订阅的 history，排除手动下载），不看 Bangumi 的播出时间。
  */
 const UPDATES_MODAL_LIMIT = 50;
 
 function updatesModalRows() {
-  return (state.subs || [])
-    .map((sub) => ({ sub, air: sub.airtime || {} }))
-    .filter((r) => Number(r.air.aired_ts) > 0)
-    .sort((a, b) => Number(b.air.aired_ts) - Number(a.air.aired_ts))
-    .slice(0, UPDATES_MODAL_LIMIT);
+  return autoDownloadRows().slice(0, UPDATES_MODAL_LIMIT);
 }
 
 function renderUpdatesModal() {
@@ -3464,19 +3487,20 @@ function renderUpdatesModal() {
   const rows = updatesModalRows();
   const now = Date.now() / 1000;
   setText('updates-sub', rows.length
-    ? `按最近一集的播出时间排序 · 共 ${rows.length} 条（最多 ${UPDATES_MODAL_LIMIT} 条）`
-    : '还没有可显示的更新');
+    ? `按自动下载的时间排序 · 共 ${rows.length} 条（最多 ${UPDATES_MODAL_LIMIT} 条）`
+    : '自动追番还没有添加过下载');
   list.replaceChildren();
   if (!rows.length) {
-    list.append(el('p', 'updates-empty', '订阅里还没有「已经更新」的记录。'));
+    list.append(el('p', 'updates-empty',
+      '自动追番还没有添加过下载。它在后台每轮检查到新集时会自动加进来。'));
     return;
   }
-  rows.forEach(({ sub, air }) => {
+  rows.forEach(({ sub, item, ts }) => {
     const row = el('button', 'updates-row');
     row.type = 'button';
     row.dataset.id = String(sub.subject_id);
-    const fresh = now - Number(air.aired_ts) < 24 * 3600;
-    if (fresh && !air.finished) row.classList.add('is-new');
+    const fresh = now - ts < 24 * 3600;
+    if (fresh) row.classList.add('is-new');
 
     const img = el('img', 'updates-cover');
     img.loading = 'lazy';
@@ -3485,16 +3509,17 @@ function renderUpdatesModal() {
 
     const main = el('span', 'updates-main');
     main.append(el('span', 'updates-name', subscriptionName(sub) || `#${sub.subject_id}`));
-    const ep = Number(air.episode_no) > 0 ? `第 ${air.episode_no} 集 · ` : '';
+    const ep = Number(item.episode) > 0 ? `第 ${item.episode} 集 · ` : '';
+    const who = String(item.group || item.source || '').trim();
     main.append(el('span', 'updates-time',
-      `${ep}${air.aired_text || ''} · ${relativeAgo(air.aired_ts)}`));
+      `${ep}${who ? `${who} · ` : ''}${relativeAgo(ts)}`));
     row.append(img, main);
-    if (air.finished) {
-      row.append(el('span', 'updates-tag is-done', '已完结'));
-    } else if (fresh) {
-      row.append(el('span', 'updates-tag is-new', '新'));
-    }
-    row.title = [air.tip || '', '点击跳到「我的订阅」里的这一条'].filter(Boolean).join('\n');
+    if (fresh) row.append(el('span', 'updates-tag is-new', '新'));
+    row.title = [
+      item.title || '',
+      item.reason ? `添加方式：${item.reason}` : '',
+      '点击跳到「我的订阅」里的这一条',
+    ].filter(Boolean).join('\n');
     on(row, 'click', () => {
       closeUpdatesModal();
       focusSubscription(sub.subject_id);
