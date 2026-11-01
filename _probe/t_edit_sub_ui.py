@@ -192,6 +192,70 @@ def main() -> int:
         check("提交的字幕组是桜都", "桜都" in str(body.get("group") or ""), body.get("group"))
         check("提交的分辨率是 1080p", str(body.get("resolution") or "") == "1080p", body.get("resolution"))
 
+        # ---- ⑦ 回归：在「资源列表」改完筛选再点保存，存的就是这页的值 ----
+        print("\n【7】资源列表改完筛选 → 点这页的「保存修改」：存的就是这页的值（用户报过的 bug）")
+        ev(ws, "document.getElementById('m-close').click()")
+        time.sleep(0.6)
+        ev(ws, "window.__probe.switchView('subs')")
+        time.sleep(1.0)
+        ev(ws, """(() => {
+          const list = document.querySelector('#sub-list');
+          const btn = [...list.querySelectorAll('button')].find(b => (b.textContent || '').trim() === '修改订阅');
+          if (btn) btn.click();
+        })()""")
+        time.sleep(2.5)
+        check("修改订阅打开后仍在资源列表", visible("tab-res"))
+        base_group = ev(ws, "document.getElementById('f-group').value") or ""
+        check("打开时筛选条按订阅预选了字幕组", base_group == "桜都字幕组", base_group)
+
+        # 模拟用户改筛选：字幕组换成另一个组（爱恋字幕社，只在 kisssub 有）
+        changed = ev(ws, """(() => {
+          const sel = document.getElementById('f-group');
+          const opt = [...sel.options].find(o => o.value === '爱恋字幕社');
+          if (!opt) return 'no-option';
+          sel.value = '爱恋字幕社';
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+          return sel.value;
+        })()""")
+        check("把字幕组筛选改成「爱恋字幕社」", changed == "爱恋字幕社", changed)
+        time.sleep(0.4)
+        rows = ev(ws, "document.querySelectorAll('#res-body tr.res-row').length") or 0
+        check("资源表跟着筛成 kisssub 的那几条", rows > 0, f"{rows} 行")
+
+        ev(ws, "window.__probe.clearCalls()")
+        ev(ws, "document.getElementById('btn-sub-add-res').click()")
+        time.sleep(1.5)
+        calls = json.loads(ev(ws, "JSON.stringify(window.__probe.calls('/api/subscriptions', 'POST')"
+                                  ".map(c => c.body))") or "[]")
+        body = calls[-1] if calls else {}
+        check("点这页的「保存修改」提交了订阅", bool(calls), json.dumps(body, ensure_ascii=False)[:160])
+        check("存进去的是刚改的「爱恋字幕社」（不是老组）",
+              str(body.get("group") or "") == "爱恋字幕社", body.get("group"))
+        check("字幕组配上了站点 kisssub（sub_group）",
+              str(body.get("sub_group") or "") == "kisssub::爱恋字幕社", body.get("sub_group"))
+
+        # ---- ⑧ 什么都没改时点保存：不能把订阅洗掉 ----
+        print("\n【8】什么都没改就直接点保存：订阅的值原样保留")
+        ev(ws, "document.getElementById('m-close').click()")
+        time.sleep(0.6)
+        ev(ws, "window.__probe.switchView('subs')")
+        time.sleep(1.0)
+        ev(ws, """(() => {
+          const list = document.querySelector('#sub-list');
+          const btn = [...list.querySelectorAll('button')].find(b => (b.textContent || '').trim() === '修改订阅');
+          if (btn) btn.click();
+        })()""")
+        time.sleep(2.5)
+        ev(ws, "window.__probe.clearCalls()")
+        ev(ws, "document.getElementById('btn-sub-add-res').click()")
+        time.sleep(1.5)
+        calls = json.loads(ev(ws, "JSON.stringify(window.__probe.calls('/api/subscriptions', 'POST')"
+                                  ".map(c => c.body))") or "[]")
+        body = calls[-1] if calls else {}
+        check("没改也提交了（保存操作本身成功）", bool(calls), json.dumps(body, ensure_ascii=False)[:160])
+        check("字幕组仍是订阅里的「桜都字幕组」", "桜都" in str(body.get("group") or ""), body.get("group"))
+        check("分辨率仍是 1080p", str(body.get("resolution") or "") == "1080p", body.get("resolution"))
+
         ws.close()
     finally:
         try:

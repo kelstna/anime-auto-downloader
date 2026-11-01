@@ -820,6 +820,12 @@ function switchView(name) {
  */
 function switchTab(name) {
   const key = (name === 'sub') ? 'sub' : 'res';
+  // 修改订阅：切到「订阅设置」前先把资源列表里改过的筛选同步过去，
+  // 这样两个页签显示的是同一套值，在哪一页点「保存修改」都存一样的东西
+  const modal = state.modal;
+  if (key === 'sub' && modal && modal.mode === 'edit' && modal.resFilterBaseline) {
+    syncSubFormFromResFilters();
+  }
   $$('#m-tabs .tab').forEach((tab) => tab.classList.toggle('is-active', tab.dataset.tab === key));
   const map = { res: 'tab-res', sub: 'tab-sub' };
   Object.keys(map).forEach((k) => show(map[k], k === key));
@@ -1645,9 +1651,86 @@ function applySubscriptionFilterToFilters(sub) {
   }
 
   modal.backfillFilter = { applied, skipped };
+  // 记下「系统按订阅设好的筛选」基线：用户在资源列表里没动的项，保存时不能拿它覆盖订阅里的值
+  // （订阅限定的项这一轮没搜到 → 筛选条不会被预选，若照抄空值就会把订阅设置洗掉）
+  modal.resFilterBaseline = resFilterValues();
   renderResources();          // 立即按预选筛选重渲染资源表
   renderBackfillHint();
   return modal.backfillFilter;
+}
+
+/**
+ * 把 #s-group 设成 '站点::组名'：选项里没有就补一个占位项（别让用户刚选的组悄悄丢掉）。
+ * @param {string} wanted 'dmhy::桜都字幕组' 或纯组名
+ */
+function setSubGroupValue(wanted) {
+  const sel = $('s-group');
+  if (!sel) return;
+  const raw = String(wanted || '').trim();
+  if (!raw) {
+    setSelectValue(sel, '');
+    return;
+  }
+  let target = Array.from(sel.options).some((o) => o.value === raw) ? raw : '';
+  if (!target) {
+    const parsed = splitGroupValue(raw);
+    const opt = el('option', null, `${groupDisplayText(parsed.source, parsed.name)}（资源列表筛选）`);
+    opt.value = raw;
+    opt.title = '这一项来自「资源列表」的筛选，保存后会写进订阅';
+    sel.append(opt);
+    target = raw;
+  }
+  setSelectValue(sel, target);
+}
+
+/**
+ * 修改订阅：把「资源列表」的筛选条（#f-source / #f-group / #f-res / #f-lang）写回「订阅设置」。
+ * **用户在哪一页点「保存修改」，保存的就是那一页看到的值** —— 以前这里直接用 #s-* 的旧值，
+ * 于是在资源列表里改完字幕组再点保存，存回去的还是老组（用户报的「怎么没有修改成功」）。
+ * 只同步**用户真的改过**的项（和打开时按订阅预选出来的基线比）：没动的项保持订阅里的原值，
+ * 否则「订阅限定的项这一轮没搜到、筛选条是空白」会把订阅设置洗掉。
+ * 组名要配回站点：#s-group 的 value 是 '站点::组名'，优先用筛选里的站点，
+ * 没限站点就从这轮结果里找该组实际出现的站点。
+ */
+function syncSubFormFromResFilters() {
+  const modal = state.modal;
+  if (!modal) return null;
+  const f = resFilterValues();
+  const base = modal.resFilterBaseline || null;
+  const changed = (key) => !base || String(base[key] || '') !== String(f[key] || '');
+
+  // 1) 资源站
+  if (changed('source')) {
+    const sourceSel = $('s-source');
+    if (sourceSel) {
+      const has = Array.from(sourceSel.options).some((o) => o.value === f.source);
+      setSelectValue(sourceSel, has ? f.source : '');
+    }
+  }
+
+  // 2) 字幕组：组名 + 站点成对（先重建候选，再写值，避免值不在选项里被静默清空）
+  if (changed('group')) {
+    refreshSubGroupSelect();
+    if (f.group) {
+      let site = f.source;
+      if (!site) {
+        const hit = (modal.resources || []).find((r) => r && r.group && groupMatch(r.group, f.group));
+        site = hit ? String(hit.source || '') : '';
+      }
+      setSubGroupValue(joinGroupValue(site, f.group));
+    } else {
+      setSubGroupValue('');
+    }
+  }
+
+  // 3) 分辨率 / 字幕语言
+  if (changed('resolution')) setSelectValue($('s-res'), f.resolution || '');
+  if (changed('lang')) setSelectValue($('s-lang'), f.lang || '');
+
+  updateSubGroupTip();
+  refreshEpisodeSelect();
+  renderSubPreview();
+  return f;
 }
 
 function closeModal() {
@@ -2913,10 +2996,8 @@ async function addSubscription(resource, options) {
   const filterSource = String((filt && filt.source) || '').trim();
   if (filterSource) body.source_ids = [filterSource];
   else if (pickedSource) body.source_ids = [pickedSource];
-  else if (!editing) body.source_ids = [];
-  else if (modal.subscription && Array.isArray(modal.subscription.source_ids)) {
-    body.source_ids = modal.subscription.source_ids;      // 编辑且没动就保留原来的
-  }
+  else if (editing) body.source_ids = [];     // 修改订阅选了「不限」＝ 真的把站点限制清掉
+  else body.source_ids = [];
   if (chosen) body.resource = chosen;
 
   await withBusy(opts.button, async () => {
@@ -2947,7 +3028,12 @@ async function addSubscription(resource, options) {
       renderSubPreview();
       renderAnime();          // 刷新卡片「已订阅」标记
       refreshStatus();        // 刷新侧栏计数（不阻塞弹窗交互）
-      if (editing) await reloadSubsKeepingView(subject.id, opts.button);
+      if (editing) {
+        await reloadSubsKeepingView(subject.id, opts.button);
+        // 保存成功后，让资源列表跟着新设置重新筛一遍（否则这页的筛选条还停在旧条件上，
+        // 看起来像「保存没生效」）
+        if (state.modal === modal) applySubscriptionFilterToFilters(sub);
+      }
     } catch (err) {
       showError(node, `加入订阅失败：${err.message}`);
       toast(`加入订阅失败：${err.message}`, 'err');
@@ -3074,9 +3160,10 @@ async function addSubscriptionFromResList(button) {
     toast('补下载模式：请用资源行的「下载」把单集推送到这个订阅', 'info');
     return;
   }
-  // 修改订阅：两个页签上的主按钮都只是「把『订阅设置』里的值写回订阅」。
-  // 注意不带 filters —— 资源列表的 #f-* 只是浏览用的筛选，不能拿它覆盖订阅的设置
+  // 修改订阅：先把「资源列表」这一页看到/改过的筛选写回订阅设置，再按它保存 ——
+  // 用户在这页改了字幕组/语言/分辨率再点「保存修改」，保存的必须是这页的值
   if (modal.mode === 'edit') {
+    syncSubFormFromResFilters();
     await addSubscription(null, { button });
     refreshResSubscribeBtn();
     return;

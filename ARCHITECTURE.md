@@ -142,6 +142,12 @@ Resource 就地改集号。偏移由 `_probe/fix_offsets_bgm.py` 按 Bangumi 章
 「保存修改」，都只 `POST /api/subscriptions` 写回设置、不带 resource（不重新下载）；
 资源行的「下载」在 edit 模式下走 `downloadForSubscription()`：只给这条订阅补这一集，不动设置。
 
+保存口径：**在哪一页点保存，存的就是哪一页看到的值**。资源列表那页先调
+`syncSubFormFromResFilters()` 把 `#f-*` 里**用户改过**的项（与 `modal.resFilterBaseline` 比对，
+基线由 `applySubscriptionFilterToFilters()` 每次预选后写下）同步进 `#s-*`，再走 `addSubscription()`；
+没改过的项保持订阅原值，避免「限定的项这轮没搜到 → 筛选条空着 → 把设置洗掉」。
+保存成功后会用新的订阅对象重新预选一次 `#f-*`，让资源列表跟着新设置刷新。
+
 ### ④ 自动追番（后台每 5 分钟）
 
 ```
