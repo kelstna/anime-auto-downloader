@@ -9,15 +9,29 @@
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | **1.2**（README 顶部写的就是这个；tag `v1.2` → `24c8f16`。本次没发版，仍是 1.2） |
+| 版本 | **1.3**（README 顶部 = 1.3；tag `v1.3` 打在「发版」提交上，即本文件所在提交。上一版 `v1.2` → `24c8f16`） |
 | 配置 schema | `data/config.json` 里 `"version": 3`（**不是 App 版本**，别混；本次没动配置） |
-| 最后一次提交 | **`f72123e`**（修「修改订阅点保存没生效」：资源列表改的筛选现在真的存进订阅） |
-| 分支 / 远端 | `main` 跟踪 `kelstna/main`（https://github.com/kelstna/anime-auto-downloader），本地 **领先远端 5 个提交**（含本次，未 push，用户没要求 push） |
-| 仓库体量 | `main` 上 **9 个提交**；另有**独立**本地分支 `backup-9919` → `9919e74`（2026-10-15，不在 main 的历史里） |
-| 工作区 | ✅ **干净**（2026-11-01 14:4x 提交后复核） |
-| 服务 | **正在运行**：`pythonw` PID **5844**（`-m app.main`，2026-11-01 16:2x 重启，为的是让前端资源版本号刷新），监听 **`0.0.0.0:7788`**，实测 `GET /` 200、`app.js?v=d8a15b7863`。**数据目录是 `E:\アニメ\anifetch\data`**（见「已知问题 8」） |
-| 测试 | `python tests\run_all.py`：**325 例 = 322 通过 + 3 跳过 + 0 失败**，7.7 秒（2026-11-01 14:37 实测） |
+| 最后一次提交 | **本文件所在提交**（发版 1.3：README/ARCHITECTURE 版本号、`release-notes.md`、样例配置入库）；发版内容那一笔是 `b58cd0a` |
+| 分支 / 远端 | `main` 跟踪 `kelstna/main`（https://github.com/kelstna/anime-auto-downloader）；**本次会话已 push**：`main` 与 tag `v1.3` 都推到远端（从 `24c8f16` 往后共 **14 个提交**），并发了 GitHub Release |
+| 仓库体量 | `main` 上 **18 个提交**（发版前远端只有 4 个，本次推上去 14 个）；另有**独立**本地分支 `backup-9919` → `9919e74`（2026-10-15，不在 main 的历史里） |
+| 工作区 | ✅ **干净**（发版提交后；剩 `app/data/t2s.tsv` 这类本地产物，未入库） |
+| 服务 | **正在运行**：`pythonw` PID **5844**（`-m app.main`，2026-11-01 16:2x 重启，为的是让前端资源版本号刷新），监听 **`0.0.0.0:7788`**，实测 `GET /` 200、`app.js?v=d8a15b7863`。**数据目录在部署副本的 `data/`**（见「已知问题 8」；仓库里不写本机绝对路径） |
+| 测试 | `python tests\run_all.py`：最近一次有效记录 **全绿**（2026-11-01 14:37，325 例 = 322 通过 + 3 跳过 + 0 失败）。发版会话在受限沙箱里跑不了（已知问题 10），本次没重跑 |
 | 产物 | 无（本地服务，没有 APK/安装包；「发布」= 推送仓库，用户自己 `git pull` 或复制目录） |
+
+## 本次会话：发版 v1.3（推送 + GitHub Release）
+
+- **版本**：README 顶部 1.2 → **1.3**，ARCHITECTURE 标题同步改 v1.3；tag `v1.3` 打在本次发版提交上
+  （顺序按铁律 5：先改 README，再打 tag）。
+- **发版材料**：新增 `release-notes.md`（v1.3 说明，可直接当 GitHub Release 正文）。
+- **样例配置入库**：`data/config.example.json` 去掉本机用户名与下载根目录、`version` 改成 3；
+  `.gitignore` 从 `data/` 改为 `data/*` + `!data/config.example.json`
+  —— 铁律 2 说的「唯一例外」以前其实没生效，README 引用了这个文件但仓库里没有。
+- **脱敏**：`STATUS.md`、`_probe/refresh_meta.py` 里的本机绝对路径换成 `<部署目录>` / `<安装目录>`。
+  **注意：旧提交的历史里仍能看到原路径**（本次没有改写 git 历史，按铁律 11）；从本提交起 HEAD 是干净的。
+- **推送**：`main`（13 个提交）+ tag `v1.3` → `kelstna`，并建 GitHub Release。
+- **没跑测试**：受限沙箱里 `tempfile.mkdtemp()` 建的目录连清理都 Access denied（已知问题 10），
+  用户没批准切完全权限。本批只动了文档 + 样例配置，**没改运行代码**；上一批的测试记录是全绿。
 
 ## 本次会话（续）：修「修改订阅点了保存没生效」
 
@@ -84,7 +98,7 @@ AGENTS.md（「注意 1~11」→「1~12」两处）  STATUS.md
   订阅设置页结构 = 原版（无 `#sub-results`、无 `#tab-sub` 样式规则）；修改订阅两页签都在、默认资源列表；
   `#f-group=桜都字幕组`、`#f-res=1080p`、表里只剩 2 条、提示条写「已按订阅筛选」；
   两个按钮都是「保存修改」；点它提交的 body 不带 `resource`
-- 已把 `app/web/{index.html,app.js,styles.css}` 复制到部署副本 `E:\アニメ\anifetch\app\web\`
+- 已把 `app/web/{index.html,app.js,styles.css}` 复制到部署副本 `<部署目录>\app\web\`
   （SHA256 逐个一致），**并按顺序跑了那边的 `stop.bat` → `start.bat`**（新 PID 58548）；
   线上 `/` 已确认不含「筛选结果」，服务端 `app.js` 含「保存修改」且不含 `renderSubResources`
 
@@ -168,19 +182,20 @@ tests/test_groups_cached.py（新增）  README.md  ARCHITECTURE.md  STATUS.md
    `shoot_ui_batch.py`/`cdp_ui.py` 各一条断言基于旧交互、篇章集号字面不一致、`aniparse` 可选、罕见编号重叠）。
 2. **文档里的用例数过期**（2026-11-01 观察：README 写 274、ARCHITECTURE 写 296、实测 325 例）。
    改文档时别再写死数字，统一写「跑 `tests\run_all.py` 看摘要」。
-3. `data/config.example.json` 里有本机用户名 `tsubaki`，`"version"` 还是 1（会被 `_migrate()` 升到 3）；
-   开源给别人前值得清一遍。
+3. `data/config.example.json` 的**脱敏已完成**（2026-11-01 发版）：去掉用户名与下载根目录、`"version"` 升到 3，
+   并随仓库入库。注意 `app/data/t2s.tsv` 是**本地产物**（缺省会回退到手写表），
+   收工的 `git add -A` 会把它带进去，提交前看一眼。
 4. 运行期数据全在 `data/`、**不进库**：换机器/重装要自己带走 `config.json`，否则等于重新配置。
 5. 订阅/关键词学习记录没有 git 兜底；只有 `subs.py` 删除订阅时自动留 `.before-delete-*.bak`（最多 20 份）。
 6. 三站都是外部站点：改版/限流/证书问题随时可能让某个站静默返回空（历史上 Nyaa 因 `search(lang=…)`
    签名不匹配整站静默空结果过）。
 7. 交接三件套**刻意不写本机绝对路径**（DSH 以项目根为 cwd，命令全用相对路径）：换机器、搬目录都不用改文档。
    （唯一的例外是下面第 8 条要说明运行位置，不得不写死一个路径。）
-8. **运行中的服务跑的是「部署副本」**：`E:\アニメ\anifetch`（`app/` 与本工作区逐字节同步，数据目录也在
-   `E:\アニメ\anifetch\data`）。改完源码的生效步骤是：改 `app/` → 复制改动文件到那边的 `app/` →
+8. **运行中的服务跑的是「部署副本」**（`<部署目录>`，本机真实路径不写进仓库）：`app/` 与本工作区逐字节同步，
+   数据目录也在那边的 `data/`。改完源码的生效步骤是：改 `app/` → 复制改动文件到那边的 `app/` →
    重启（在该目录执行 `stop.bat` / `start.bat`，脚本用 `%~dp0`，别在工作区里 double-click，
    否则会拿工作区那份 `data/` 起服务）。本工作区的 `data/` 是旧副本，别拿它看现状。
-9. **订阅已恢复**：`E:\アニメ\anifetch\data\subscriptions.json` 现有 **17 条**（2026-11-01 14:37 复核，
+9. **订阅已恢复**：部署副本的 `data/subscriptions.json` 现有 **17 条**（2026-11-01 14:37 复核，
    40913 字节；13:16 清空时的快照 `.before-delete-20261101-131621.bak` / `-131623.bak` 还在，可回退）。
 10. **DSH 沙箱下跑不了的工具**（本会话实测，2026-11-01）：
     - 受限模式下 `tempfile.mkdtemp()` 建的目录会被拒绝访问 → `python tests\run_all.py` 会报一堆
@@ -191,8 +206,8 @@ tests/test_groups_cached.py（新增）  README.md  ARCHITECTURE.md  STATUS.md
 
 ## 下次可以做的（候选，等用户挑）
 
-- **真机验收本批**：按上面「待验收 · 本批」6 条点一遍（**刷新页面即可生效**，前端改动不用重启服务）→
-  （用户要的话）发版：**先把 README 顶部改成 1.3，再打 tag `v1.3`**（顺序反了会出现 tag 1.3 / README 1.2）。
+- **真机验收本批**：按上面「待验收 · 本批」6 条点一遍（**刷新页面即可生效**，前端改动不用重启服务）。
+  发版已完成：1.3 + tag `v1.3` + GitHub Release。
 - 上一批（手动搜索 / 合集判定 / 批量订阅字幕组）的 8 条待验收也还没真机走过，可一并走。
 - 修 ARCHITECTURE 那 6 条 TODO，先挑「按当前筛选订阅没传 `all_seasons`」这条（用户能直接感知）。
 - 文档统一：「测试多少例」改成「跑 `tests\run_all.py` 看摘要」，消灭三处过期数字。
@@ -244,6 +259,7 @@ python tests\run_all.py
 
 | 日期 | 做了什么 | 提交 |
 | --- | --- | --- |
+| 2026-11-01（发版） | **发版 1.3**：README/ARCHITECTURE 版本号 1.3、新增 `release-notes.md`、`data/config.example.json` 脱敏后入库（`.gitignore` 改 `data/*` + 例外）、交接文档里的本机路径脱敏；推 `main` + tag `v1.3` 并发 GitHub Release | `b58cd0a` + 本提交 |
 | 2026-11-01（晚） | **修改订阅改成整套弹窗并按订阅自动筛选**：两个页签都保留、默认资源列表、`#f-*` 按订阅预选、主按钮「保存修改」；新增 `_probe/t_edit_sub_ui.py`（29 项）；第一版在订阅设置页加过「筛选结果」表，用户否决后**整个撤掉**（index.html/styles.css 退回原版）；已同步部署副本（刷新即生效） | `c74308c` |
 | 2026-11-01（下午） | **修「批量订阅不显示字幕组」**：候选改从预热缓存 `search_<id>` 汇总（`/api/groups/cached` 新增 `subject_ids`），不再依赖订阅；新增 `tests/test_groups_cached.py`；同步 README/ARCHITECTURE；服务已重启并在接口层验证 | `861aaf7` |
 | 2026-11-01 | 建立这套交接机制：`AGENTS.md` + `STATUS.md` + `新会话开场白.txt`（从"优化本地番剧播放"移植过来）；顺手实测测试与运行状态 | 未提交（本次只新增文档） |
