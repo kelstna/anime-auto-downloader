@@ -11,17 +11,17 @@
 | --- | --- |
 | 版本 | **1.2**（README 顶部写的就是这个；tag `v1.2` → `24c8f16`） |
 | 配置 schema | `data/config.json` 里 `"version": 3`（**不是 App 版本**，别混） |
-| 最后一次提交 | `24c8f16`（2026-10-26）「最近更新」弹窗改成按自动追番的下载记录显示 |
-| 分支 / 远端 | `main` 跟踪 `kelstna/main`（https://github.com/kelstna/anime-auto-downloader），本地 = 远端 `24c8f16` |
-| 仓库体量 | `main` 上 **4 个提交**（`160e0a3` / `8da6bc6` / `39c2660` / `24c8f16`）、141 个跟踪文件；另有**独立**本地分支 `backup-9919` → `9919e74`（2026-10-15，不在 main 的历史里）。**别把 5 个 SHA 都当 main 的提交** |
-| 工作区 | ⚠️ **不干净**：15 个文件已修改 + **5 个未跟踪**（探针 `_probe/t_manual_keyword_ui.py`、新测试 `tests/test_groups_cached.py`、交接三件套 `AGENTS.md` / `STATUS.md` / `新会话开场白.txt`），**全部未提交**（2026-11-01 14:00 复核） |
+| 最后一次提交 | `861aaf7`（2026-11-01）「fix(批量订阅): 字幕组候选改挂预热缓存，清空订阅后不再消失」—— **它就是当前代码的提交**（本条 STATUS 的补记提交更晚，内容仅为文档） |
+| 分支 / 远端 | `main` 跟踪 `kelstna/main`（https://github.com/kelstna/anime-auto-downloader），本地 **领先远端 1 个提交**（`861aaf7` 未 push，用户没要求 push） |
+| 仓库体量 | `main` 上 **5 个提交**（`160e0a3` / `8da6bc6` / `39c2660` / `24c8f16` / `861aaf7`）；另有**独立**本地分支 `backup-9919` → `9919e74`（2026-10-15，不在 main 的历史里）。**别把 6 个 SHA 都当 main 的提交** |
+| 工作区 | ✅ **干净**（2026-11-01 14:02 提交后复核，`git status --short` 无输出） |
 | 服务 | **正在运行**：`pythonw` PID **48796**（`-m app.main --no-browser`，2026-11-01 13:59:52 重启），监听 **`0.0.0.0:7788`**。注意：**进程 cwd 与数据目录都是 `E:\アニメ\anifetch`**，不是本工作区（见「已知问题 8」） |
 | 测试 | `python tests\run_all.py`：**323 例 = 320 通过 + 3 跳过 + 0 失败**，9.5 秒（2026-11-01 14:00 实测） |
 | 产物 | 无（本地服务，没有 APK/安装包；「发布」= 推送仓库，用户自己 `git pull` 或复制目录） |
 
-## 在途改动（未提交，这批就是下一步要收尾的）
+## 已提交、等你验收（`861aaf7`）
 
-四件事混在同一个工作区里：
+四件事在同一个提交里（1~3 是上一批在途改动，4 是本次修的）：
 
 1. **手动搜索升级为「联网关键词的唯一来源」**
    填了词就只按这个词联网搜、留空就按番剧名/别名搜；点「手动搜索」**强制联网**（吸收原来的
@@ -32,7 +32,7 @@
    标 `is_movie`、不算合集也不隐藏；`(Part N)` 是分段标记不是集号。
 3. **集号解析修复** + 配套测试（`parse_episode_range` 重写、`_NON_EPISODE_NUMBERS`）。
 4. **批量订阅的字幕组候选改挂预热缓存**（2026-11-01 本次）
-   根因：`/api/groups/cached` 只遍历 `subs.all_subs()`，用户 13:16 清空订阅后候选池归零，
+   根因：`/api/groups/cached` 只遍历 `subs.all_subs()`，13:16 订阅被清空后候选池归零，
    批量订阅弹窗的字幕组下拉只剩「不限字幕组」。现在：
    - 后端 `GET /api/groups/cached?subject_ids=1,2,…`：候选从预热缓存 `search_<id>.json`
      的 `items[].source/group` 汇总，订阅只作**附加来源**（并集）；不传参 = 旧口径
@@ -42,19 +42,19 @@
 涉及文件：
 
 ```
-# 1~3（上一批，仍未提交）
+# 1~3（上一批在途改动，本次一并入库）
 app/core/util.py  app/core/warmup.py  app/sources/base.py  app/sources/engine.py
 app/web/app.js    app/web/index.html  app/web/server.py    app/web/styles.css
 README.md         ARCHITECTURE.md
 _probe/ui_fixture.html  _probe/ui_fixture_template.html  _probe/t_manual_keyword_ui.py（新增）
 tests/test_util.py  tests/test_engine.py  tests/test_manual_keyword.py
-# 4（本次）
+# 4（本次修复）
 app/web/server.py  app/web/app.js  app/web/index.html  app/web/styles.css
 tests/test_groups_cached.py（新增）  README.md  ARCHITECTURE.md  STATUS.md
 ```
 
-> 1~3 的测试早已全绿，缺的是**真实页面验收**；
-> 4 已通过 8 个新用例 + 接口实测（6 部勾选 → 61 个组），缺的只是**页面上点一次弹窗**。
+> 测试已全绿；4 还额外做过接口实测（6 部勾选 → 61 个组，带站点名）。
+> 剩下的是**页面上点一遍**（见下面「待验收」第 8 条）。
 
 ## 待验收（这批改动）
 
@@ -73,7 +73,7 @@ tests/test_groups_cached.py（新增）  README.md  ARCHITECTURE.md  STATUS.md
 
 1. `ARCHITECTURE.md` 第八节列的 6 条 TODO 都还在（「按当前筛选订阅」没传 `all_seasons`、批量订阅优先级提示、
    `shoot_ui_batch.py`/`cdp_ui.py` 各一条断言基于旧交互、篇章集号字面不一致、`aniparse` 可选、罕见编号重叠）。
-2. **文档里的用例数过期**（2026-11-01 观察：README 写 274、ARCHITECTURE 写 296、实测 315 例）。
+2. **文档里的用例数过期**（2026-11-01 观察：README 写 274、ARCHITECTURE 写 296、实测 323 例）。
    改文档时别再写死数字，统一写「跑 `tests\run_all.py` 看摘要」。
 3. `data/config.example.json` 里有本机用户名 `tsubaki`，`"version"` 还是 1（会被 `_migrate()` 升到 3）；
    开源给别人前值得清一遍。
@@ -145,7 +145,7 @@ python tests\run_all.py
 
 | 日期 | 做了什么 | 提交 |
 | --- | --- | --- |
-| 2026-11-01（下午） | **修「批量订阅不显示字幕组」**：候选改从预热缓存 `search_<id>` 汇总（`/api/groups/cached` 新增 `subject_ids`），不再依赖订阅；新增 `tests/test_groups_cached.py`；同步 README/ARCHITECTURE；服务已重启并在接口层验证 | 本次提交（含上一批在途改动） |
+| 2026-11-01（下午） | **修「批量订阅不显示字幕组」**：候选改从预热缓存 `search_<id>` 汇总（`/api/groups/cached` 新增 `subject_ids`），不再依赖订阅；新增 `tests/test_groups_cached.py`；同步 README/ARCHITECTURE；服务已重启并在接口层验证 | `861aaf7` |
 | 2026-11-01 | 建立这套交接机制：`AGENTS.md` + `STATUS.md` + `新会话开场白.txt`（从"优化本地番剧播放"移植过来）；顺手实测测试与运行状态 | 未提交（本次只新增文档） |
 | 2026-10-26 | 「最近更新」弹窗改成按自动追番的下载记录显示 | `24c8f16`（= tag `v1.2`） |
 | 2026-10-23 | README 去掉「更新日志」段 | `39c2660`、`8da6bc6` |
