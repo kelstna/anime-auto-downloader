@@ -120,6 +120,9 @@ git commit -m "feat(范围): 改了什么 + 为什么"
 - **改前端也要重启**：`?v=<资源版本号>` 是进程启动时按 `styles.css+ui.js+app.js` 算的哈希，
   带 `?v=` 的资源按 `max-age=3600` 缓存 —— 不重启版本号不变，浏览器继续用旧 JS/CSS，
   刷新多少次都看不到改动（2026-11-01 踩过：文件已同步，用户刷新仍是旧界面）。
+- **别把 `start.bat` 放在会被 kill 的后台任务里**：它结尾有 `pause`，任务被 kill 时连带把它
+  拉起的 `pythonw` 一起结束（2026-11-01 踩过：服务被顺手弄停）。要么双击脚本，要么直接
+  `start "" /b pythonw -m app.main` 拉起来并另起一条命令做验证。
 - **`_probe/ui_fixture.html` 是 `make_fixture.py` 的产物**：改了 `index.html` 不重跑，mock 探针测的是旧页面。
 - **探针脚本默认会写真 `data/`**：自己跑探针前先设隔离目录（`ANIME_DATA_DIR`），否则污染真实订阅/配置。
 - **别在文档里写死用例数**：README 和 ARCHITECTURE 里那两处数字都已经过期（还不止一次）。
