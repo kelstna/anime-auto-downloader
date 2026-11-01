@@ -232,12 +232,10 @@ qB 恢复后自动补下载并累加 `flushed_total`。
 - `app.js`：状态机 + 渲染 + 事件；关键状态 `state.subjects / state.subs / state.selected /
   state.modal / state.batchRules(存 localStorage)`
 - 番剧详情弹窗的两个页签（点卡片 / 修改订阅 / 补下载三个入口）
-  - **资源列表**：`#f-*` 筛选条 + 资源表，行内「下载 / 复制磁力」；补下载模式下 `#f-*` 会按订阅预选
+  - **资源列表**：`#f-*` 筛选条 + 资源表，行内「下载 / 复制磁力」；补下载与修改订阅模式下
+    `#f-*` 会按订阅预选（`applySubscriptionFilterToFilters`）
   - **订阅设置**：四个限定条件（`#s-source` / `#s-group` / `#s-res` / `#s-lang`）+「将订阅」预览行
-    + **筛选结果 `#sub-results`**（只读表：把上面四个条件当筛选条实时筛 `state.modal.resources`，
-    口径复用 `groupMatch` / `langMatches` / `sortResourceRows`，合集默认不列、勾 `#s-batch` 才列）
-  - 整页滚动靠 `#tab-sub { flex: 1 1 auto; min-height: 0 }`；结果表自己限高（表头 sticky），
-    操作行排在结果表之后 —— **不做吸底**，吸底会浮在结果表上把它挡住
+    + 操作按钮 + 最近下载记录 —— **保持原样，不加别的区块**（要看筛选后的结果就切资源列表）
 - `ui.js`：自绘下拉（`.sel`）、主题切换（跟随系统/深色/浅色）、入场动效
 - `styles.css`：暖纸+墨色设计系统，含 1280 / 1180 / 760 / 520 断点与 reduced-motion
 

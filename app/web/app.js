@@ -824,8 +824,6 @@ function switchTab(name) {
   const map = { res: 'tab-res', sub: 'tab-sub' };
   Object.keys(map).forEach((k) => show(map[k], k === key));
   enhanceSelects();          // 刚显示的 tab 里的下拉（如订阅设置的字幕组/集数）交给 ui.js
-  // 切到订阅设置时把「筛选结果」刷一遍：搜索是后台跑完的，切过来不该看到旧表
-  if (key === 'sub') renderSubResources();
 }
 
 /* =============================================================================
@@ -1440,7 +1438,7 @@ async function openModal(subject, options) {
   fillSubForm(subject);
   applyModalMode();
   refreshResSubscribeBtn();   // 先按当前状态（此刻通常还没资源）初始化筛选条上的「加入订阅」
-  switchTab('res');           // 三种模式都先停在资源列表（修改订阅也一样，用户要能顺手挑资源）
+  switchTab('res');           // 三种模式都先停在资源列表（修改订阅也一样：用户要能顺手挑资源）
 
   node.hidden = false;
   document.body.classList.add('modal-open');
@@ -1477,14 +1475,12 @@ async function openModal(subject, options) {
   if ((session.mode === 'backfill' || session.mode === 'edit') && session.subscription) {
     applySubscriptionFilterToFilters(session.subscription);
   }
-  // 修改订阅：整套弹窗（资源列表 + 订阅设置）都在，默认停在资源列表；
-  // 保存走任意一页的「保存修改」按钮（见 applyModalMode / refreshResSubscribeBtn）
 }
 
 /**
  * 弹窗三种模式的静态差异：
  *   subscribe（点卡片）：两页签，默认资源列表，按钮「加入订阅」；
- *   edit（订阅卡「修改订阅」）：**同样是整套两页签**（文件需求：改订阅也要能顺手挑资源），
+ *   edit（订阅卡「修改订阅」）：**同样是整套两页签**（改订阅也要能顺手挑资源），
  *     只是预填这条订阅的设置、主按钮变「保存修改」（只改设置，不重新下载）；
  *   backfill（补下载单集）：只有资源列表一页，并在顶部给提示。
  */
@@ -1494,7 +1490,7 @@ function applyModalMode() {
   const edit = !!(modal && modal.mode === 'edit');
   const tabBtn = document.querySelector('#m-tabs .tab[data-tab="sub"]');
   if (tabBtn) tabBtn.hidden = backfill;
-  // 只有补下载模式只要一页；修改订阅沿用整套（资源列表 + 订阅设置）
+  // 只有补下载模式只要一页；修改订阅沿用整套（资源列表 + 订阅设置），默认停在资源列表
   const tabs = document.querySelector('#m-tabs') || document.querySelector('.tabs');
   if (tabs) tabs.hidden = backfill;
   // 修改订阅：两个页签上的主按钮都变成「保存修改」（只改设置，不下载）
@@ -1538,9 +1534,8 @@ function applyModalMode() {
 }
 
 /**
- * 资源列表顶部的订阅提示条（补下载 / 修改订阅共用）：
- * 说明在为哪个订阅挑选资源、已按订阅预选了哪些筛选（以及哪一项本次结果里没有），
- * 修改订阅时点行内「下载」只补这一集、不改设置，保存要走「保存修改」。
+ * 资源列表顶部的订阅提示条（补下载 / 修改订阅共用）：说明在为哪个订阅挑选资源、
+ * 已按订阅预选了哪些筛选（以及哪一项本轮结果里没有）。
  */
 function renderBackfillHint() {
   const hint = document.getElementById(BACKFILL_HINT_ID);
@@ -2138,139 +2133,6 @@ function renderSubPreview() {
   const folderSeg = el('span', 'ellipsis', `目录 ${folder || '（默认目录）'}`);
 
   box.replaceChildren(subjectSeg, groupSeg, resSeg, keywordSeg, episodeSeg, folderSeg);
-
-  // 预览行和「筛选结果」是同一份状态：这里刷新完顺手把下面那张表重算一次
-  renderSubResources();
-}
-
-/* -----------------------------------------------------------------------------
- * 订阅设置页的「筛选结果」(#sub-results)
- *   「资源站 / 限定字幕组 / 限定分辨率 / 字幕语言」既是自动追新的限定条件，也是一张筛选条：
- *   下方把「按这些条件下会下到什么」直接列出来，改任一条件实时重算，不必来回切页签。
- *   口径与资源列表（filterResources）保持同序：站点 → 字幕组 → 语言 → 分辨率，
- *   并复用 groupMatch / langMatches / sortResourceRows，避免两处筛出不同结果。
- *   **只展示不操作**：行内没有按钮、点行不改筛选 —— 在「修改订阅」里手滑点一下就改掉
- *   限定字幕组的代价太大，真要下载就去「资源列表」页签点行内「下载」。
- * -------------------------------------------------------------------------- */
-
-/** 结果表最多渲染多少行（单番通常几百条，再多也没人看，还会拖慢重算）。 */
-const SUB_RES_MAX_ROWS = 300;
-
-/** 订阅设置页的四个限定条件（#s-group 的 value 形如 'dmhy::LoliHouse'）。 */
-function subResFilters() {
-  const group = splitGroupValue(val('s-group'));
-  return {
-    source: val('s-source').trim(),          // 资源站（站点 id，空=不限）
-    groupSource: group.source,               // 字幕组自带的站点（与组名成对）
-    group: group.name,                       // 组名（空=不限）
-    resolution: val('s-res').trim(),
-    lang: rawLang(val('s-lang')),            // 与资源列表同口径：精确匹配，含 'unknown'
-  };
-}
-
-/**
- * 本地筛「筛选结果」。
- * @returns {{rows: Array, total: number, hiddenBatch: number, hiddenNoise: number}}
- *   rows 已按资源列表的排序口径排好；total 是这轮搜索的全部条数（判断“有没有搜到过”）。
- */
-function filterSubResources() {
-  const modal = state.modal;
-  const box = { rows: [], total: 0, hiddenBatch: 0, hiddenNoise: 0 };
-  if (!modal) return box;
-  const all = Array.isArray(modal.resources) ? modal.resources : [];
-  box.total = all.length;
-
-  // 噪声项永远不显示（资源列表里那是要额外勾勾选框才露出来的东西）
-  let items = all.filter((r) => r && !r.is_noise);
-  box.hiddenNoise = all.length - items.length;
-
-  // 合集：默认不显示（自动追番本来就不下合集），勾「含合集」才列出来
-  if (!checked('s-batch')) {
-    const before = items.length;
-    items = items.filter((r) => !r.is_batch);
-    box.hiddenBatch = before - items.length;
-  }
-
-  const f = subResFilters();
-  if (f.source) items = items.filter((r) => String(r.source || '') === f.source);
-  if (f.groupSource) items = items.filter((r) => String(r.source || '') === f.groupSource);
-  if (f.group) items = items.filter((r) => groupMatch(r.group, f.group));
-  if (f.lang) items = items.filter((r) => langMatches(r.lang, f.lang));
-  if (f.resolution) {
-    items = items.filter((r) => String(r.resolution || '').toLowerCase() === f.resolution.toLowerCase());
-  }
-
-  sortResourceRows(items);
-  box.rows = items;
-  return box;
-}
-
-/** 结果为空时说清是哪一种空：整轮没搜到 / 该字幕组不在本轮结果里 / 条件太严。 */
-function subResEmptyText(box) {
-  const modal = state.modal;
-  if (!box.total) return '还没有搜索结果：去「资源列表」页签点「手动搜索」联网搜一次，结果会出现在这里';
-  const group = splitGroupValue(val('s-group'));
-  if (group.name) {
-    const list = Array.isArray(modal.resources) ? modal.resources : [];
-    const hit = list.some((r) => r && !r.is_noise && r.group && groupMatch(r.group, group.name));
-    if (!hit) {
-      return `「${groupDisplayText(group.source, group.name)}」不在本次搜索结果里（订阅里可能还存着老的字幕组）：`
-        + '换一个组，或去「资源列表」重新搜索';
-    }
-  }
-  return '当前限定条件下没有资源：放宽资源站 / 字幕组 / 分辨率 / 语言，或勾上「含合集」再试';
-}
-
-/** 结果表的一行：只读（没有操作列、没有点击副作用）。 */
-function buildSubResRow(r) {
-  const row = el('tr', 'sub-res-row');
-  row.append(el('td', 'col-src', r.source_name || r.source || '–'));
-
-  const groupCell = el('td', 'col-group', r.group || '–');
-  groupCell.title = r.group || '';
-  row.append(groupCell);
-
-  const titleCell = el('td', 'col-title');
-  titleCell.append(titled('cell-title', r.title || '(无标题)'));
-  row.append(titleCell);
-
-  const langKey = normalizeLang(r.lang);
-  const langCell = el('td', 'col-lang');
-  const pill = el('span', `lang-pill ${LANG_PILL_CLASS[langKey]}`, LANG_LABELS[langKey]);
-  pill.title = LANG_PILL_TITLE[langKey];
-  langCell.append(pill);
-  row.append(langCell);
-
-  row.append(el('td', 'col-res', r.resolution || '–'));
-  row.append(el('td', 'col-ep num', episodeText(r)));
-  row.append(el('td', 'col-size num', fmtSize(r)));
-  row.append(el('td', 'col-time', r.published || '–'));
-  return row;
-}
-
-/** 渲染「筛选结果」：表体 + 计数（含隐藏了多少合集/噪声）+ 空态原因。 */
-function renderSubResources() {
-  const modal = state.modal;
-  const body = $('sub-res-body');
-  if (!body || !modal) return;
-
-  const box = filterSubResources();
-  const shown = box.rows.slice(0, SUB_RES_MAX_ROWS);
-  body.replaceChildren(...shown.map(buildSubResRow));
-
-  const bits = [];
-  if (!box.total) bits.push('还没有结果');
-  else bits.push(`共 ${fmtInt(box.rows.length)} 条`);
-  if (box.rows.length > shown.length) bits.push(`只显示前 ${fmtInt(shown.length)} 条`);
-  if (box.hiddenBatch) bits.push(`已隐藏 ${fmtInt(box.hiddenBatch)} 条合集`);
-  if (box.hiddenNoise) bits.push(`已隐藏 ${fmtInt(box.hiddenNoise)} 条噪声`);
-  setText('sub-results-count', bits.length ? `· ${bits.join(' · ')}` : '');
-
-  const empty = $('sub-res-empty');
-  if (empty) {
-    empty.hidden = box.rows.length > 0;
-    if (!box.rows.length) empty.textContent = subResEmptyText(box);
-  }
 }
 
 /** 重置筛选控件（每次打开弹窗）。 */
@@ -2286,7 +2148,6 @@ function resetFilters() {
   setSelectValue($('f-sort'), 'default');
   setChecked('f-batch', false);
   if (noiseToggle) noiseToggle.checked = false;
-  setChecked('s-batch', false);          // 「筛选结果」里的「含合集」每次开弹窗都复位
   setValue('f-keyword', '');
   setValue('s-keyword', '');
   syncKeywordUI();
@@ -3163,7 +3024,7 @@ function refreshResSubscribeBtn() {
     return;
   }
   // 修改订阅：这里和「订阅设置」底部的按钮是同一件事 —— 把当前设置写回订阅。
-  // 保存不该被「这轮筛选有没有资源」拦住，所以永远可点（文案/提示见 applyModalMode）。
+  // 保存不该被「这轮筛选有没有资源」拦住，所以永远可点（文案见 applyModalMode）。
   if (modal.mode === 'edit') {
     show('btn-sub-add-res', true);
     btn.disabled = false;
@@ -5162,10 +5023,6 @@ function bindEvents() {
     refreshEpisodeSelect();
     renderSubPreview();
   });
-  // 资源站 / 字幕语言同样是「筛选结果」的筛选条件（这两个下拉以前根本没绑事件，改了列表一动不动）
-  ['s-source', 's-lang'].forEach((id) => on($(id), 'change', renderSubPreview));
-  // 「含合集」只影响下面那张结果表，不写进订阅设置
-  on($('s-batch'), 'change', renderSubResources);
   ['s-episode', 's-initial', 's-total', 's-folder', 's-keyword'].forEach((id) => {
     on($(id), 'change', renderSubPreview);
     on($(id), 'input', renderSubPreview);
