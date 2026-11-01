@@ -126,6 +126,33 @@ class GroupsCachedFromWarmupTest(unittest.TestCase):
         out = srv.api_groups_cached({"subject_ids": ["999"]}, None)
         self.assertEqual(out["groups"], [], "没预热过的番剧就老实返回空，等前端提示")
 
+    # ---------------------------------------------------------------- #
+    def test_does_not_normalize_items(self):
+        """候选只要 source/group：走了 normalize_items 会把弹窗拖慢 20 多秒。
+
+        实测：34 部 × 约 5800 条资源重算派生字段要 22.7 秒，只读原始字段 2 毫秒。
+        这是「打开批量订阅弹窗」的主路径，慢一次用户就以为页面卡死了。
+        """
+        calls = []
+        original = srv.normalize_items
+        srv.normalize_items = lambda items: calls.append(len(items or [])) or original(items)
+        self._patch({100: {"items": [_resource_dict("dmhy", "假组")]}})
+        try:
+            out = srv.api_groups_cached({"subject_ids": ["100"]}, None)
+        finally:
+            srv.normalize_items = original
+        self.assertEqual([g["name"] for g in out["groups"]], ["假组"], "候选还得正常出")
+        self.assertEqual(calls, [], f"字幕组候选不该调用 normalize_items，实际调用了 {calls}")
+
+    def test_falls_back_to_title_when_group_missing(self):
+        """极旧条目没有 group 字段：从标题里提取，别整条丢掉。"""
+        item = _resource_dict("dmhy", "假组")
+        item.pop("group", None)
+        self._patch({100: {"items": [item]}})
+        out = srv.api_groups_cached({"subject_ids": ["100"]}, None)
+        self.assertEqual([g["name"] for g in out["groups"]], ["假组"],
+                         "group 缺失时要用标题里的 [组名] 兜底")
+
 
 if __name__ == "__main__":
     unittest.main()

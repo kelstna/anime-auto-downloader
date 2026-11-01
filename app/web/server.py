@@ -26,7 +26,7 @@ from ..core import (
 )
 from ..core.util import human_size, lan_ipv4_addresses, parse_episode, sanitize_name
 from ..sources import engine
-from ..sources.base import Resource, lang_matches, normalize_items, resolution_matches
+from ..sources.base import Resource, extract_group, lang_matches, normalize_items, resolution_matches
 
 _mimetypes_added = False
 COVER_DIR = os.path.join(config.DATA_DIR, "covers")
@@ -927,16 +927,24 @@ def api_groups_cached(q, body):
         cached, _age = warmup.search_any_age(sid, "")
         if cached is None:
             continue
-        for it in normalize_items(cached.get("items")):
-            r = Resource.from_dict(it)
-            name = (r.group or "").strip()
+        # 只读缓存里的原始字段（source / group），**绝不能走 normalize_items**：
+        # 那会把每条资源重算分辨率/语言/集数，34 部 × 约 5800 条实测要 20 多秒，
+        # 而候选只需要「哪个站有哪个组」（实测 2 毫秒）。能读到缓存就说明 schema
+        # 指纹对得上，group 本来就是当前解析器写进去的；只有极旧的条目才回退到从标题提取。
+        for it in (cached.get("items") or []):
+            if not isinstance(it, dict):
+                continue
+            name = str(it.get("group") or "").strip()
+            if not name:
+                name = extract_group(str(it.get("title") or ""))
             if not name:
                 continue
-            key = f"{r.source}|{engine.normalize_group(name)}"
+            src = str(it.get("source") or "")
+            key = f"{src}|{engine.normalize_group(name)}"
             item = buckets.get(key)
             if item is None:
-                buckets[key] = {"name": name, "source": r.source,
-                                "source_name": r.source_name or r.source, "count": 1}
+                buckets[key] = {"name": name, "source": src,
+                                "source_name": str(it.get("source_name") or src), "count": 1}
             else:
                 item["count"] += 1
     groups = sorted(buckets.values(), key=lambda g: (-g["count"], g["name"]))

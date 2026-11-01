@@ -38,6 +38,9 @@
      的 `items[].source/group` 汇总，订阅只作**附加来源**（并集）；不传参 = 旧口径
    - 前端 `loadBatchGroups()` 传当前勾选；候选为空时弹窗里给一句原因提示（`#batch-group-hint`）
    - 只读缓存不联网；不碰解析/筛选 → **不触发铁律 6 的缓存失效**
+   - **性能坑（当次就修了）**：候选第一版照搬了 `normalize_items()`，对 34 部 × 约 5800 条
+     重算派生字段，接口实测 **25.9 秒**。改成只读缓存里的原始 `source`/`group`
+     （`group` 缺失才用 `extract_group(title)` 兜底）后：34 部 **119 ms**、6 部 **19 ms**。
 
 涉及文件：
 
@@ -53,7 +56,7 @@ app/web/server.py  app/web/app.js  app/web/index.html  app/web/styles.css
 tests/test_groups_cached.py（新增）  README.md  ARCHITECTURE.md  STATUS.md
 ```
 
-> 测试已全绿；4 还额外做过接口实测（6 部勾选 → 61 个组，带站点名）。
+> 测试已全绿；4 还额外做过接口实测：6 部勾选 → 61 个组 / 19 ms，34 部勾选 → 299 个组 / 119 ms。
 > 剩下的是**页面上点一遍**（见下面「待验收」第 8 条）。
 
 ## 待验收（这批改动）
