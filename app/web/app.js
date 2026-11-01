@@ -568,12 +568,14 @@ function resourceKey(r) {
   return `${r.source || ''}:${String(r.title || '').trim().toLowerCase()}`;
 }
 
-/** 集数展示：单集 / 区间 / 合集。 */
+/** 集数展示：单集 / 区间 / 合集 / 剧场版。 */
 function episodeText(r) {
   if (!r) return '–';
   if (r.is_batch) {
     return (r.episode || r.episode_end) ? `合集 ${r.episode || r.episode_end}+` : '合集';
   }
+  // 剧场版是单片（不是合集，也不该显示成「第 N 集」）
+  if (r.is_movie) return '剧场版';
   if (r.episode === null || r.episode === undefined) return '–';
   if (r.episode_end && r.episode_end !== r.episode) return `${r.episode}-${r.episode_end}`;
   return String(r.episode);
@@ -1210,7 +1212,7 @@ function buildAnimeCard(subject) {
   if (subject.resources_cached || cachedCount > 0) {
     const age = cacheAgeText(subject.resources_cached_age);
     const badge = el('span', 'badge badge-cache', cachedCount > 0 ? `已缓存 ${fmtInt(cachedCount)}` : '已缓存');
-    badge.title = `资源已缓存${age ? ` · ${age}` : ''}（打开详情秒显示，点「重新搜索」可联网刷新）`;
+    badge.title = `资源已缓存${age ? ` · ${age}` : ''}（打开详情秒显示，点弹窗里的「手动搜索」可联网刷新）`;
     badges.append(badge);
   }
   // 必须挂在封面容器内：标记是绝对定位，挂在 .card 上会落到卡片底部，
@@ -1442,17 +1444,23 @@ async function openModal(subject, options) {
   document.body.classList.add('modal-open');
   enhanceSelects();          // 弹窗里的筛选器 / 订阅设置下拉此刻才可见，交给 ui.js 接管
 
-  // 三个请求互相独立，任一失败都不影响另外两个
+  // 先把已有订阅读出来：订阅里存着手动搜索关键词，这次联网搜索必须用它
+  // （否则弹窗里显示的是按番剧名/别名搜出来的结果，搜索框里的词等于摆设——用户反馈的就是这个）
+  await loadModalSubscription();
+  if (state.modal !== session) return;
+  // 「联网搜索用哪个关键词」只看搜索框：有词就用词，没词按番剧名/别名（后端展开）
+  const keyword = manualKeyword();
+
+  // 两个请求互相独立，任一失败都不影响另一个
   // 注意：补下载的「按订阅预选筛选」要等资源结果一回来就做，
   // 不能等 loadGroups（有时很慢），否则用户先看到的是没预选的筛选条。
   await Promise.allSettled([
-    runSearch().then(() => {
+    runSearch({ keyword }).then(() => {
       if (session.mode === 'backfill' && session.subscription && state.modal === session) {
         applySubscriptionFilterToFilters(session.subscription);
       }
     }),
-    loadGroups(),
-    loadModalSubscription(),
+    loadGroups(keyword),
   ]);
   if (state.modal !== session) return;      // 期间被关掉 / 换成了别的番剧：不再动界面
 
@@ -2132,17 +2140,31 @@ function resetFilters() {
 }
 
 /**
- * 手动搜索框的联动：非空时露出「恢复自动搜索」，并同步订阅设置里的说明文案。
- * 订阅存的是 #s-keyword（用户能在订阅设置里看到、也能改），这里只负责显示。
+ * 搜索框里手动指定的关键词（空 = 没指定，按番剧名/别名搜索）。
+ * 这个框是「联网搜索用什么词」的唯一来源：
+ *   · 点「手动搜索」/ 回车 → 用它联网重搜（留空则按番剧名/别名联网重搜）
+ *   · 加入订阅时把它存进订阅，之后自动追新也只用它（后端 watcher.search_for）
+ */
+function manualKeyword() {
+  return String(val('f-keyword') || '').trim();
+}
+
+/**
+ * 手动搜索框的联动：
+ *   ① 非空时露出「恢复自动搜索」
+ *   ② 与「订阅设置 → 自定义搜索词」（#s-keyword）保持同一个值：两处都能改，改哪边都算
+ *   ③ 同步订阅设置里的说明文案
  */
 function syncKeywordUI() {
-  const kw = String(val('f-keyword') || '').trim();
+  const kw = manualKeyword();
+  const mirror = $('s-keyword');
+  if (mirror && String(mirror.value || '').trim() !== kw) mirror.value = kw;
   show('btn-keyword-reset', !!kw);
   const tip = $('s-keyword-tip');
   if (tip) {
     tip.textContent = kw
-      ? `订阅后会一直用「${kw}」搜索（之后自动追新也用这个词）`
-      : '填了就只用这个词搜索（手动搜索会自动填进来）';
+      ? `联网搜索一直用「${kw}」；加入订阅后自动追新也只用这个词`
+      : '留空＝按番剧名/别名搜索；在资源列表上方的搜索框点「手动搜索」会自动填进来';
   }
 }
 
@@ -2159,18 +2181,23 @@ function showResMessage(text, kind) {
 
 /**
  * POST /api/search：资源列表 + 搜索统计。
- * 后端默认优先返回缓存（打开弹窗秒显示）；options.force = true 时跳过缓存重新联网，
- * 「重新搜索」按钮走的就是这条路径。
- * options.keyword 非空 = 手动搜索：只按这个词搜（后端不再展开番剧别名），
- * 并把它填进「订阅设置 → 自定义搜索词」，加入订阅时会一起存下来（自动追新也用这个词）。
+ * 关键词口径：options.keyword 不传 = 用搜索框里的词（空 = 按番剧名/别名，后端展开别名）；
+ *   传了就用传的（手动搜索/打开弹窗都走同一条路径，绝不在联网时不带用户指定的词）。
+ * 缓存口径：默认优先返回缓存（打开弹窗秒显示）；options.force = true 时跳过缓存重新联网，
+ *   「手动搜索」与「恢复自动搜索」走的就是这条路径（所以「重新搜索」按钮不再需要）。
+ * 手动关键词同时填进「订阅设置 → 自定义搜索词」，加入订阅时一起存下来（自动追新也用这个词）。
  */
 async function runSearch(options) {
   const modal = state.modal;
   if (!modal) return;
   const opts = options || {};
   const force = !!opts.force;
-  const keyword = String(opts.keyword || '').trim();
-  showResMessage(force ? '正在重新联网搜索资源…（多站点并发）' : '正在搜索资源，请稍候…（多站点并发）', 'info');
+  const keyword = (opts.keyword !== undefined ? String(opts.keyword) : manualKeyword()).trim();
+  showResMessage(force
+    ? (keyword
+      ? `正在用「${keyword}」联网搜索资源…（多站点并发）`
+      : '正在按番剧名/别名联网搜索资源…（多站点并发）')
+    : '正在搜索资源，请稍候…（多站点并发）', 'info');
   show('res-empty', false);
   showInfo($('search-state'), '');
 
@@ -2190,9 +2217,8 @@ async function runSearch(options) {
     if (keyword) {
       // 手动搜索：订阅设置里的字幕组下拉改用这批结果（见 subGroupOptions 的回退顺序）
       modal.groups = [];
-      setValue('s-keyword', keyword);
     }
-    syncKeywordUI();
+    syncKeywordUI();          // 搜索框 / 订阅设置里的搜索词保持同一个值
     modal.resources = Array.isArray(data.items) ? data.items : [];
     modal.sourceStatus = data.source_status || {};
     modal.keywordsUsed = data.keywords_used || {};
@@ -2220,12 +2246,19 @@ async function runSearch(options) {
   }
 }
 
-/** POST /api/groups：字幕组列表（对象数组，含条数与来源站点）。 */
-async function loadGroups() {
+/**
+ * POST /api/groups：字幕组列表（对象数组，含条数与来源站点）。
+ * keyword 不传 = 用搜索框里的词：字幕组候选要和资源列表同一批结果，
+ * 否则下拉里会出现「这个词根本搜不到」的组合（用户选了就永远没资源）。
+ */
+async function loadGroups(keyword) {
   const modal = state.modal;
   if (!modal) return;
   try {
-    const data = await request(API.groups, { method: 'POST', body: { subject_id: modal.subject.id } });
+    const body = { subject_id: modal.subject.id };
+    const kw = String(keyword === undefined ? manualKeyword() : (keyword || '')).trim();
+    if (kw) body.keyword = kw;
+    const data = await request(API.groups, { method: 'POST', body });
     modal.groups = Array.isArray(data.groups) ? data.groups : [];
     renderGroups(modal.groups);
     if (modal === state.modal) refreshSubGroupSelect();   // 字幕组下拉用真实数据填充
@@ -2272,13 +2305,13 @@ function renderSearchState(data, errorMessage) {
   const searchLang = langFilterText(data.search_lang);
   if (searchLang) chips.append(el('span', 'tag', `语言：${searchLang}`));
   chips.append(el('span', 'tag', `用时 ${(Number(data.elapsed) || 0).toFixed(2)}s`));
-  // 结果来自本地缓存时明确标注（并提示可点「重新搜索」联网刷新）
+  // 结果来自本地缓存时明确标注（并提示可点「手动搜索」联网刷新）
   if (data.cached) {
     const age = cacheAgeText(data.cache_age);
     const chip = el('span', 'tag', `来自缓存${age ? ` · ${age}` : ''}${data.cache_stale ? '（已过期）' : ''}`);
     chip.title = data.cache_stale
-      ? '缓存已过期：点右上角「重新搜索」可联网刷新'
-      : '来自本地缓存，点右上角「重新搜索」可强制联网刷新';
+      ? '缓存已过期：点「手动搜索」联网刷新（关键词留空＝按番剧名/别名重搜）'
+      : '来自本地缓存，点「手动搜索」可强制联网刷新';
     chips.append(chip);
   }
   if (data.total !== undefined && data.total !== null) chips.append(el('span', 'tag', `命中 ${fmtInt(data.total)} 条`));
@@ -2558,7 +2591,7 @@ function langFilterText(value) {
 }
 
 /**
- * 整批结果都没标语言时提示一次：可点「重新搜索」让站点按语言过滤
+ * 整批结果都没标语言时提示一次：可点「手动搜索」让站点按语言过滤
  * （dmhy / kisssub 支持把「简体」等后缀拼进站内搜索，比我们猜标题更准）。
  * 只在用户真的选了语言时提示，且每轮搜索结果最多提示一次，避免来回切筛选刷屏。
  */
@@ -2570,7 +2603,7 @@ function promptLangRescan() {
   if (!list.length) return;
   if (list.some((r) => normalizeLang(r.lang))) return;   // 有标注：本地就能筛，不打扰
   modal.langHintShown = true;
-  toast('这些站点未标注字幕语言，可点「重新搜索」让站点按语言过滤', 'info');
+  toast('这些站点未标注字幕语言，可点「手动搜索」让站点按语言过滤', 'info');
 }
 
 /**
@@ -2620,7 +2653,7 @@ function renderResources() {
     empty.hidden = result.rows.length > 0;
     empty.textContent = modal.resources.length
       ? '当前筛选条件下没有资源，试试放宽筛选、勾选「含合集」或显示噪声项。'
-      : '没有搜索到资源。可换字幕组，或点「重新搜索」再试一次。';
+      : '没有搜索到资源。可换字幕组，或点「手动搜索」再试一次。';
   }
   announce('modal');
 }
@@ -2849,8 +2882,9 @@ async function addSubscription(resource, options) {
     subject_id: subject.id,
     group: groupName,
     sub_group: joinGroupValue(groupSource, groupName),
-    // 手动搜索关键词（订阅设置里可见可改）：存进订阅后，自动追新也只用这个词搜索
-    custom_keyword: String(val('s-keyword') || modal.customKeyword || '').trim(),
+    // 手动搜索关键词（订阅设置里可见可改）：存进订阅后，自动追新也只用这个词搜索。
+    // 取值以资源列表上方的搜索框为准（「在这个地方手动指定关键词」，两处已同步），空 = 按番剧名/别名
+    custom_keyword: String(val('f-keyword') || val('s-keyword') || modal.customKeyword || '').trim(),
     // 资源列表里筛了就按筛的存（筛选「全部」＝空，也不偷偷改成所选资源的属性）
     resolution: String(filt ? (filt.resolution || '') : ((chosen && chosen.resolution) || val('s-res') || '')).trim(),
     // 字幕语言：订阅时就把弹窗里选的那一项记下来，自动追新也守它（以前只当搜索筛选，订完就丢）
@@ -2912,10 +2946,11 @@ async function addSubscription(resource, options) {
  * 与订阅设置页的 #btn-sub-add 共用同一个 addSubscription()，只有「资源从哪来」不同。
  * -------------------------------------------------------------------------- */
 
-/** 一条资源的集数描述（按钮 title 与提示用）：第 13 集 / 合集 / 空。 */
+/** 一条资源的集数描述（按钮 title 与提示用）：第 13 集 / 合集 / 剧场版 / 空。 */
 function resourceEpisodeLabel(resource) {
   if (!resource) return '';
   if (resource.is_batch) return '合集';
+  if (resource.is_movie) return '剧场版';
   const episode = Number(resource.episode);
   return Number.isFinite(episode) && episode > 0 ? `第 ${episode} 集` : '';
 }
@@ -2990,7 +3025,7 @@ function refreshResSubscribeBtn() {
     btn.disabled = true;
     btn.title = modal.resources.length
       ? RES_SUB_NO_PICK_TIP
-      : '没有搜索到资源：先点「重新搜索」，或到「订阅设置」里选要下载哪一集';
+      : '没有搜索到资源：先点「手动搜索」（关键词留空＝按番剧名重搜），或到「订阅设置」里选要下载哪一集';
     return;
   }
 
@@ -3037,7 +3072,7 @@ async function addSubscriptionFromResList(button) {
  * 「加入订阅」拿不到资源时，把原因说清楚 —— 用户要能分清是**联网搜不到**还是**缓存搜不到**：
  *   live_failed        联网失败（某个站 HTTP 500 / 超时）→ 不是没有资源，是这次没搜着
  *   live_empty         联网搜了，确实 0 条
- *   cache_empty        缓存里就是 0 条（可能这站当时挂了）→ 建议点「重新搜索」
+ *   cache_empty        缓存里就是 0 条（可能这站当时挂了）→ 建议点「手动搜索」
  *   cache_filtered_empty 缓存里有 N 条，但都被当前筛选排除了 → 放宽筛选
  */
 function resSubscribeFailText(data, filters) {
@@ -3051,13 +3086,13 @@ function resSubscribeFailText(data, filters) {
     .join('；');
 
   if (reason === 'live_failed') {
-    return `联网搜索失败（${errs || '资源站报错'}）——不是没有资源，是这次没搜着；稍后点「重新搜索」再试`;
+    return `联网搜索失败（${errs || '资源站报错'}）——不是没有资源，是这次没搜着；稍后点「手动搜索」再试`;
   }
   if (reason === 'live_empty') {
     return `联网搜了 ${raw} 条，但按当前筛选（${label}）一条都不剩：放宽筛选后重试`;
   }
   if (reason === 'cache_empty') {
-    return `缓存里就是 0 条${ageText ? `（${ageText}搜的）` : ''}：点「重新搜索」联网再搜一次`;
+    return `缓存里就是 0 条${ageText ? `（${ageText}搜的）` : ''}：点「手动搜索」联网再搜一次`;
   }
   if (reason === 'cache_filtered_empty') {
     return `缓存里有 ${raw} 条，但都被当前筛选（${label}）排除了：放宽筛选后重试`;
@@ -3080,6 +3115,9 @@ async function subscribeByCurrentFilters(button) {
       if (filters.group) body.group = filters.group;
       if (filters.resolution) body.resolution = filters.resolution;
       if (filters.lang) body.lang = filters.lang;      // 订阅本身不存语言，取资源这一步按语言筛
+      // 关键词口径必须和列表里看到的一致：搜索框里有词就按那个词搜，否则后端会拿别名口径的结果
+      const keyword = manualKeyword();
+      if (keyword) body.keyword = keyword;
       body.force = false;
       data = await request(API.search, { method: 'POST', body });
       if (state.modal !== modal) return;
@@ -3217,19 +3255,38 @@ function batchGroupOptions(sourceId) {
 }
 
 /**
- * 批量订阅用的字幕组候选（秒回）：直接取「我的订阅」里已经用过的组
- * （订阅里存的是 `站点::组名`），不用逐部去搜，打开弹窗就能选。
+ * 批量订阅用的字幕组候选（秒回）：取「勾选番剧的预热搜索结果」里出现过的组。
+ *
+ * 以前只取「我的订阅」里已经用过的组（订阅里存的是 `站点::组名`），结果用户把订阅
+ * 清空之后，下拉就只剩一个「不限字幕组」—— 明明 34 部番都预热过了却一个组都选不了。
+ * 现在改成把当前勾选的 subject_ids 传给后端，由预热缓存 `search_<id>` 汇总；
+ * 订阅只作为附加来源（有就并进来，没有不影响）。
  */
 async function loadBatchGroups() {
+  const ids = [...(state.selected || [])];
+  const qs = ids.length ? `?subject_ids=${ids.join(',')}` : '';
   let merged = [];
   try {
-    const data = await request(API.groupsCached);
+    const data = await request(`${API.groupsCached}${qs}`);
     merged = (data.groups || []).map((g) => ({
       source: String(g.source || ''), name: String(g.name || ''), count: g.count || 0,
     })).filter((g) => g.name);
   } catch (err) { /* 取不到就不提供候选，仍可按站点/语言/分辨率订阅 */ }
   state.batchGroups = merged;
   renderBatchRules();
+  renderBatchGroupHint();
+}
+
+/** 候选为空时说明原因：只剩一个「不限字幕组」，用户看不出是缓存还没预热。 */
+function renderBatchGroupHint() {
+  const box = $('batch-group-hint');
+  if (!box) return;
+  const empty = !(state.batchGroups && state.batchGroups.length);
+  box.hidden = !empty;
+  box.textContent = empty
+    ? '没有可选字幕组：勾选的番剧还没有预热过的搜索结果（先点「拉取在看番剧」跑一遍），'
+      + '或者这几个站点都没搜到带字幕组的资源。'
+    : '';
 }
 
 /** 打开「批量订阅设置」窗口。 */
@@ -4618,7 +4675,7 @@ function ensureCachePanel() {
   panel.id = 'cache-panel';
   const head = el('div', 'panel-head');
   head.append(el('h2', null, '资源缓存'));
-  head.append(el('span', 'hint', '搜索结果缓存到本机，打开番剧详情秒显示；找新资源时在弹窗里点「重新搜索」联网刷新'));
+  head.append(el('span', 'hint', '搜索结果缓存到本机，打开番剧详情秒显示；找新资源时在弹窗里点「手动搜索」联网刷新'));
   panel.append(head);
 
   const row = el('div', 'btn-row');
@@ -4885,31 +4942,38 @@ function bindEvents() {
   // 点表头排序（用户要求：搜索结果支持按标签排序）
   $$('#res-table thead th.sortable').forEach((th) => on(th, 'click', () => onHeaderSortClick(th)));
   paintSortIndicators();
-  // 语言筛选：本地过滤即可（不强制联网）；整批结果都没标语言时提示一次可「重新搜索」按站内语言过滤
+  // 语言筛选：本地过滤即可（不强制联网）；整批结果都没标语言时提示一次可「手动搜索」按站内语言过滤
   on($('f-lang'), 'change', () => {
     renderResources();
     promptLangRescan();
   });
-  // 「重新搜索」= 强制联网（搜索结果默认走本地缓存，只有这里显式 force）
   on($('f-season'), 'change', () => {
-    // 「只看本季」关掉时重新搜一次：后端会返回含上一季的全量结果
+    // 「只看本季」关掉时重新搜一次：后端会返回含上一季的全量结果（关键词照旧用搜索框里的）
     state.onlyCurrentSeason = checked('f-season');
     runSearch({ force: false });
   });
-  on($('btn-research'), 'click', () => withBusy($('btn-research'), () => runSearch({ force: true })));
-  // 手动搜索：输入框回车 / 点按钮都触发；「恢复自动搜索」清空关键词后按番剧名重搜
-  on($('btn-keyword-search'), 'click', () => withBusy($('btn-keyword-search'), () => runSearch({ keyword: val('f-keyword').trim() })));
+  // 手动搜索 = 用搜索框里的关键词**联网**重搜（留空＝按番剧名/别名联网重搜）。
+  // 搜索结果默认读本地缓存，只有这里（和下面的「恢复自动搜索」）显式 force，
+  // 所以它同时承担原来「重新搜索」按钮的联网刷新职责 —— 那个按钮已按用户要求删掉。
+  on($('btn-keyword-search'), 'click',
+    () => withBusy($('btn-keyword-search'), () => runSearch({ force: true })));
   on($('f-keyword'), 'keydown', (e) => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
-    runSearch({ keyword: val('f-keyword').trim() });
+    withBusy($('btn-keyword-search'), () => runSearch({ force: true }));
   });
   on($('f-keyword'), 'input', syncKeywordUI);
+  // 订阅设置里的「自定义搜索词」与搜索框是同一个值：改哪边都算（自动追新只认这个值）
+  on($('s-keyword'), 'input', () => {
+    setValue('f-keyword', val('s-keyword').trim());
+    syncKeywordUI();
+  });
+  // 恢复自动搜索：清掉关键词 + 按番剧名/别名联网重搜
   on($('btn-keyword-reset'), 'click', () => {
     setValue('f-keyword', '');
     setValue('s-keyword', '');
     syncKeywordUI();
-    runSearch({});
+    withBusy($('btn-keyword-search'), () => runSearch({ force: true }));
   });
   // 加入订阅：资源来自 #s-episode 选中项（没选即只订阅不下载）
   on($('btn-sub-add'), 'click', () => addSubscription(null, { button: $('btn-sub-add') }));

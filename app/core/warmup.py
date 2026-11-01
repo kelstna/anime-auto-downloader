@@ -101,20 +101,30 @@ def search_any_age(subject_id: int, variant: str = ""):
     return value, age
 
 
-def _run_one(subject: "bangumi.Subject", force: bool) -> tuple[bool, bool]:
-    """搜索并缓存单部番剧。返回 (是否成功, 是否命中缓存)。"""
-    if not force:
-        # 用 cached_search 而不是 cache.get：旧版本写的 payload 必须重搜，
-        # 否则新增字段/新识别规则永远生效不了（用户会一直看到旧结果）
-        hit = cached_search(subject.id)
-        if hit is not None:
-            return True, True
-    key = cache.search_key(subject.id)
-    outcome = engine.search_by_subject(subject)
+def manual_keyword(subject_id: int) -> str:
+    """
+    该番剧订阅里存的手动搜索关键词（空 = 没指定，按番剧名/别名搜索）。
+
+    预热必须和弹窗用**同一个口径**：弹窗打开时请求 /api/search 带的是订阅里的这个词
+    （见 web/server.py 的 `kw=` 缓存键），只预热别名口径的话，点开带关键词的番剧还得现搜
+    —— 那就违背「联网搜索就用这里的关键词」和「打开详情秒显示」两条了。
+    """
+    try:
+        from . import subs
+        sub = subs.get(int(subject_id))
+        return (getattr(sub, "custom_keyword", "") or "").strip()
+    except Exception:                               # noqa: BLE001 - 拿不到订阅就按别名搜
+        return ""
+
+
+def _search_and_cache(subject: "bangumi.Subject", variant: str, keyword: str = "") -> bool:
+    """按指定搜索口径联网搜索并落盘。variant 与 web/server.py 的缓存键口径保持一致。"""
+    outcome = engine.search_by_subject(subject, keyword=keyword)
     payload = {
         "schema": SEARCH_SCHEMA,
         "subject_id": subject.id,
         "display_name": subject.display_name,
+        "search_keyword": keyword,
         "strategy": outcome.strategy,
         "elapsed": round(outcome.elapsed, 2),
         "keywords_used": outcome.keywords_used,
@@ -124,7 +134,34 @@ def _run_one(subject: "bangumi.Subject", force: bool) -> tuple[bool, bool]:
         "items": [r.to_dict() for r in outcome.resources],
         "searched_at": time.time(),
     }
-    cache.set(key, payload)
+    cache.set(cache.search_key(subject.id, variant), payload)
+    return True
+
+
+def _run_one(subject: "bangumi.Subject", force: bool) -> tuple[bool, bool]:
+    """搜索并缓存单部番剧。返回 (是否成功, 是否命中缓存)。"""
+    if not force:
+        # 用 cached_search 而不是 cache.get：旧版本写的 payload 必须重搜，
+        # 否则新增字段/新识别规则永远生效不了（用户会一直看到旧结果）
+        hit = cached_search(subject.id)
+        if hit is not None:
+            # 别名口径已有缓存：顺手把「手动关键词」口径也补上（以前只预热了别名口径，
+            # 带关键词的订阅点开弹窗还得现搜。这里不 force，命中就跳过）
+            keyword = manual_keyword(subject.id)
+            if keyword and cached_search(subject.id, f"kw={keyword}") is None:
+                try:
+                    _search_and_cache(subject, f"kw={keyword}", keyword)
+                except Exception as e:              # noqa: BLE001 - 补预热失败不影响主流程
+                    logger.warn("预热（手动关键词）失败 [%s]：%s", subject.display_name, e)
+            return True, True
+    _search_and_cache(subject, "", "")
+    # 订阅里指定了手动关键词 → 弹窗/补下载会按那个词请求，另一份额外预热
+    keyword = manual_keyword(subject.id)
+    if keyword:
+        try:
+            _search_and_cache(subject, f"kw={keyword}", keyword)
+        except Exception as e:                      # noqa: BLE001
+            logger.warn("预热（手动关键词）失败 [%s]：%s", subject.display_name, e)
     return True, False
 
 

@@ -1058,7 +1058,8 @@ html .card-badges .badge-cache { background: rgba(20, 18, 15, .74); color: #f4ef
 .col-group  { width: 114px; }
 .col-lang   { width: 62px; }
 .col-res    { width: 54px; }
-.col-ep     { width: 44px; }
+/* 集数要放得下「剧场版」「合集 12+」这类文字，不只是两三位数字 */
+.col-ep     { width: 68px; }
 .col-size   { width: 66px; }
 .col-seed   { width: 54px; }
 .col-time   { width: 112px; }
@@ -1511,6 +1512,9 @@ select.sel-native { display: none; }
 .batch-modal .modal-backdrop, #batch-modal { align-items: start; }
 .batch-modal .updates-body { padding: var(--sp-4) var(--sp-5); }
 .batch-rules { display: flex; flex-direction: column; gap: var(--sp-2); }
+/* 字幕组候选为空时的说明行：和规则行贴紧，不抢按钮的注意力 */
+.batch-group-hint { margin: 6px 2px 0; color: var(--text-2); }
+.batch-group-hint[hidden] { display: none; }
 .batch-rule {
   display: grid;
   grid-template-columns: 34px 150px minmax(0, 1fr) 130px 130px auto;

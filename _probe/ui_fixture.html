@@ -256,13 +256,13 @@
   </main>
 </div>
 
-<!-- ============ 「最近更新」弹窗：侧栏点「更多」打开，最多 50 条 ============ -->
+<!-- ============ 「最近更新」弹窗：侧栏点「更多」打开，最多 50 条自动下载记录 ============ -->
 <div class="modal-backdrop" id="updates-modal" hidden>
   <div class="modal updates-modal" role="dialog" aria-modal="true" aria-labelledby="updates-title">
     <header class="updates-head">
       <div>
         <h2 id="updates-title">最近更新</h2>
-        <p class="updates-sub" id="updates-sub">按最近一集的播出时间排序</p>
+        <p class="updates-sub" id="updates-sub">自动追番自动添加的下载</p>
       </div>
       <button type="button" class="icon-btn" id="updates-close" title="关闭"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
     </header>
@@ -290,11 +290,13 @@
 
     <!-- 资源列表 -->
     <div class="tab-body" id="tab-res">
-      <!-- 手动搜索：自动搜索搜不到、或想指定某条资源时自己给关键词；加订阅时会把词记住，之后自动追新也用它 -->
+      <!-- 手动搜索：这里的词就是「联网搜索用哪个关键词」的唯一来源。
+           留空 = 按番剧名/别名搜；点「手动搜索」或用回车 = 用这里的词联网重搜（也是联网刷新入口）。
+           加入订阅会把词记住，之后自动追新也只用它。 -->
       <div class="manual-search">
-        <input id="f-keyword" placeholder="手动搜索关键词，回车即搜（可带字幕组名，如「ANi 药屋少女的呢喃」）">
-        <button type="button" class="btn" id="btn-keyword-search">手动搜索</button>
-        <button type="button" class="btn btn-sm" id="btn-keyword-reset" hidden>恢复自动搜索</button>
+        <input id="f-keyword" placeholder="搜索关键词：留空＝按番剧名/别名联网搜索（可带字幕组名，如「ANi 药屋少女的呢喃」）">
+        <button type="button" class="btn" id="btn-keyword-search" title="用搜索框里的关键词联网搜索（留空＝按番剧名/别名）">手动搜索</button>
+        <button type="button" class="btn btn-sm" id="btn-keyword-reset" hidden title="清空关键词，按番剧名/别名联网重搜">恢复自动搜索</button>
       </div>
       <div class="filters">
         <label class="filter"><span>资源站</span>
@@ -324,8 +326,8 @@
           </select></label>
         <label class="check" title="关掉后显示所有季度（含上一季）的资源"><input type="checkbox" id="f-season" checked><span>只看本季</span></label>
         <!-- 右侧动作成组：整行换行时也贴右，不会掉到下一行最左边 -->
+        <!-- 联网刷新已并入上方搜索框的「手动搜索」（留空＝按番剧名/别名联网搜索），这里不再单独放按钮 -->
         <div class="filters-actions">
-          <button type="button" class="btn btn-sm" id="btn-research">重新搜索</button>
           <!-- 筛选完可直接订阅：优先用表里点选的那条资源；没点选则用「订阅设置」里选的集数 -->
           <button type="button" class="btn btn-primary" id="btn-sub-add-res">加入订阅</button>
         </div>
@@ -444,8 +446,8 @@
         </div>
         <div class="form-cell">
           <label for="s-keyword">自定义搜索词</label>
-          <input id="s-keyword" placeholder="留空 = 按番剧名/别名自动搜索">
-          <span class="field-tip" id="s-keyword-tip">留空＝按番剧名/别名搜索；手动搜索的词会自动填进来</span>
+          <input id="s-keyword" placeholder="留空 = 按番剧名/别名搜索">
+          <span class="field-tip" id="s-keyword-tip">留空＝按番剧名/别名搜索；在资源列表上方的搜索框点「手动搜索」会自动填进来</span>
         </div>
         <div class="form-cell span-2">
           <label for="s-folder">下载目录</label>
@@ -503,6 +505,8 @@
       </div>
       <div class="updates-body">
         <div id="batch-rules" class="batch-rules"></div>
+        <!-- 字幕组候选为空时的说明（勾选的番还没预热过就别让用户猜） -->
+        <p class="muted small batch-group-hint" id="batch-group-hint" hidden></p>
         <div class="panel-actions">
           <button type="button" class="btn btn-sm" id="batch-add-rule">添加订阅规则</button>
           <span class="muted small" id="batch-hint">优先级从上到下；合集不会自动下载，只会下最新一集，之后自动追新</span>
@@ -661,6 +665,10 @@
     })(),
   };
 
+  // 给测试脚本留个口子：可以在页面里改 subscription（例如临时塞一个 custom_keyword，
+  // 验证「打开弹窗时用订阅里存的关键词联网搜索」）
+  window.__mock = { subscription, resources, subjects };
+
   // ---- 待下载队列（qBittorrent 掉线期间攒下的）----
   // 可变：点「立即补下载」/ 侧栏那一行时 mock 会把队列清空，用来验证「恢复后提示」
   let queueItems = [
@@ -802,6 +810,23 @@
     if (path === '/api/subscriptions/check-all') {
       return Promise.resolve(json({ ok: true, result: { checked: 1, downloaded: 1, elapsed: 6.2,
         details: [{ subject_id: 498378, name: '间谍过家家 第三季', found: 42, downloaded: 1 }] } }));
+    }
+    // /api/search：把手动搜索词原样回声（真后端会返回 search_keyword / strategy），
+    // 这样 mock 页面也能验证「搜索框里的词就是联网搜索用的那个词」
+    if (path === '/api/search') {
+      const base = responses['/api/search'];
+      const kw = String((sent && sent.keyword) || '').trim();
+      const data = Object.assign({}, base);
+      data.cached = false;
+      if (kw) {
+        data.strategy = `手动关键词「${kw}」`;
+        data.search_keyword = kw;
+        data.keywords_used = Object.keys(base.source_status || {}).reduce((acc, sid) => {
+          acc[sid] = [kw];
+          return acc;
+        }, {});
+      }
+      return Promise.resolve(json(data));
     }
     // 待下载队列：补下载 / 删除（mock 里点一下就「qBittorrent 恢复」，队列清空）
     if (path === '/api/queue/flush') {

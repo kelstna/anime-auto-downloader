@@ -11,8 +11,8 @@ from typing import Any, Optional
 
 from ..core import config, http, logger
 from ..core.util import (
-    is_noise_title, parse_episode, parse_episode_range, parse_resolution, parse_size,
-    to_simplified,
+    category_is_batch, is_noise_title, looks_like_movie, parse_episode, parse_episode_range,
+    parse_resolution, parse_size, to_simplified,
 )
 
 # 标题开头的 [字幕组] 或 【字幕组】
@@ -65,6 +65,7 @@ class Resource:
     episode_end: Optional[int] = None
     is_batch: bool = False
     is_noise: bool = False
+    is_movie: bool = False          # 剧场版/单片（不是合集：界面显示「剧场版」，不被隐藏）
     infohash: str = ""
 
     def to_dict(self) -> dict:
@@ -241,7 +242,7 @@ def lang_matches(resource_lang: str, wanted: str) -> bool:
 
 
 def enrich(res: Resource) -> Resource:
-    """补全派生字段：分辨率、大小、剧集、字幕语言、噪声标记。"""
+    """补全派生字段：分辨率、大小、剧集、字幕语言、噪声/剧场版/合集标记。"""
     if not res.resolution:
         res.resolution = parse_resolution(res.title)
     if not res.size_bytes and res.size_text:
@@ -250,7 +251,18 @@ def enrich(res: Resource) -> Resource:
     if res.episode is None:
         res.episode = parse_episode(res.title)
     res.episode_end = b
-    res.is_batch = res.is_batch or batch
+    # 站点分类优先：动漫花园的「季度全集」是权威口径 —— 标题写成 `S01 | 01-12`（不带方括号）
+    # 这种我们自己的正则认不出来的真合集，靠分类才判得对（实测漏判过）。
+    # Nyaa / 爱恋没有这个分类（只有语言/来源），只能靠上面的标题规则。
+    # 这里**重新算**而不是沿用旧值：缓存里可能是上一版程序判的（把 [Movie] 当合集那种）。
+    res.is_batch = bool(batch or category_is_batch(res.category))
+    # 剧场版是单片，不算合集（以前被当成合集 → 弹窗里默认隐藏，4 条剧场版集体消失）
+    res.is_movie = res.is_movie or looks_like_movie(res.title)
+    if res.is_movie:
+        # 剧场版没有「第 N 集」这种编号：解析器偶尔会从 [MP4] 之类的地方抠出一个数字
+        # （aniparse 就把 `[MP4]` 读成第 4 集），不清掉可能被自动追番当成新集下载
+        res.episode = None
+        res.episode_end = None
     res.is_noise = is_noise_title(res.title)
     if not res.group:
         res.group = extract_group(res.title)
@@ -265,17 +277,25 @@ def enrich(res: Resource) -> Resource:
 
 def normalize_items(items) -> list[dict]:
     """
-    读取缓存里的资源列表时重新补全派生字段（分辨率/语言/集数/大小/噪声）。
+    读取缓存里的资源列表时重新补全派生字段（分辨率/语言/集数/大小/噪声/合集/剧场版）。
 
     为什么必须做：缓存是「上一版程序」写的。新增字段（比如字幕语言 lang）之后，
     旧 payload 里根本没有这个键，照原样返回就会让 UI 把「[简日内嵌]」显示成
     「未标注」（用户反馈过），而且用户看到的一直是旧数据。这里读缓存时统一重算一遍，
     新字段、新解析规则立刻生效，不用等缓存过期。
+
+    集数/合集/剧场版这几个**先清空再重算**：缓存里存的是旧版本解析的结果
+    （例如 `(Part 2: …)` 曾被当成第 2 集、`[Movie]` 曾被当成合集），不清空就永远改不过来。
     """
     out = []
     for it in items or []:
         if isinstance(it, dict):
-            out.append(enrich(Resource.from_dict(it)).to_dict())
+            res = Resource.from_dict(it)
+            res.episode = None
+            res.episode_end = None
+            res.is_batch = False
+            res.is_movie = False
+            out.append(enrich(res).to_dict())
     return out
 
 

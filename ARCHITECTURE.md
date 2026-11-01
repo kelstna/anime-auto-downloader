@@ -101,25 +101,37 @@ Resource 就地改集号。偏移由 `_probe/fix_offsets_bgm.py` 按 Bangumi 章
 界面点「拉取在看番剧」 → GET /api/bangumi/collections?type=3&force=1
   → bangumi.get_collections()（强制联网，不用旧缓存）
   → meta.save_many(items)          ← 一次性把 首播/总话数/封面/评分/更新时刻 存本地
+  → 顺手预热：每部番按番剧名/别名搜一遍，写 data/cache/search_<id>.json（后台线程）
   → 返回卡片列表
 ```
+
+预热写下的 `search_<id>.json` 顺带被**批量订阅的字幕组候选**用（`/api/groups/cached`）：
+这份缓存里每条资源都带 `source` + `group`，所以候选不依赖「有没有订阅」，
+订阅清空后照样能选组 —— 以前只读订阅缓存，清空订阅后下拉只剩「不限字幕组」。
 
 ### ② 打开某部番的资源弹窗
 
 ```
-点卡片 → POST /api/search {subject_id}
+点卡片 → POST /api/search {subject_id, keyword?}
+  → 关键词口径：搜索框里的词（= 订阅里存的自定义搜索词）。有词就只按这个词搜，
+    没词按番剧名/别名展开（见 engine.search_by_subject）
   → 命中预热缓存？是：读缓存（快，0.0x 秒）
+    · 缓存键带 kw= 时**只认它自己的缓存**，没有就联网（绝不回退别名缓存，
+      否则搜索框里的词形同摆设 —— server._pick_search_cache）
   → 否：engine.search_by_subject() 并发搜 3 个站
   → apply_season_rules()：季判定 + 集号换算（起点用 meta.start_ep）
   → 前端渲染资源表（多列可排序、可按站点/字幕组/语言/分辨率筛）
 ```
+
+「手动搜索」= 用搜索框里的词 `force=true` 联网重搜（留空＝按番剧名/别名重搜），
+它同时承担「联网刷新」的职责（原「重新搜索」按钮已删）。
 
 ### ③ 加入订阅
 
 ```
 弹窗里点「加入订阅」
   → POST /api/subscriptions
-  → 记录：站点/字幕组/语言/分辨率、集号偏移、目录、初始下载策略
+  → 记录：站点/字幕组/语言/分辨率、**自定义搜索词（custom_keyword）**、集号偏移、目录、初始下载策略
   → 按 initial_mode 决定是否立刻下载最新一集
 ```
 
@@ -132,7 +144,8 @@ watcher._loop
       └→ 每条订阅 check_subscription()
           ├→ _season_meta()     和资源弹窗同一口径：别名取 Bangumi 缓存（含 infobox「别名」），
           │                     本季起点取章节表 start_ep，标识命中的资源直接算本季
-          ├→ search_for()       搜索 + 套同一套季判定（起点来自 Bangumi）
+          ├→ search_for()       搜索 + 套同一套季判定（起点来自 Bangumi）；
+          │                     订阅有 custom_keyword 时**只用这个词**（engine 不再展开别名）
           ├→ _new_candidates()  组/语言/季/去重过滤
           │    ├ 已下载过的集号 → 跳过
           │    ├ 换算后集号 < 1 → 跳过
@@ -191,7 +204,9 @@ qB 恢复后自动补下载并累加 `flushed_total`。
 | POST | `/api/config` | 保存设置（立即生效） |
 | GET | `/api/bangumi/collections?type=3&force=1` | 在看列表（force=1 强制刷新） |
 | GET | `/api/bangumi/meta` | 元数据缓存状态 |
-| POST | `/api/search` | 搜资源（季判定 + 集号换算） |
+| POST | `/api/search` | 搜资源（季判定 + 集号换算）；`keyword` = 手动搜索词（空=按番剧名/别名），`force=true` 跳过缓存联网 |
+| POST | `/api/groups` | 字幕组候选；`keyword` 同上（候选与资源列表同一批结果） |
+| GET | `/api/groups/cached?subject_ids=1,2` | 批量订阅用的字幕组候选：从预热缓存 `search_<id>` 汇总；`subject_ids` 限定范围，不传则退回「订阅里的番剧」（不联网） |
 | GET/POST | `/api/subscriptions` | 列表 / 加入订阅 |
 | POST | `/api/subscriptions/{id}/update` | 修改订阅 |
 | DELETE | `/api/subscriptions/{id}` | 删除订阅（删前自动快照） |

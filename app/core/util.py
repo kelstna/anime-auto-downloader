@@ -75,10 +75,68 @@ _RANGE_PATTERNS = (
     re.compile(r"第\s*0*(\d{1,4})\s*[-~～]\s*0*(\d{1,4})\s*[话話集]"),
     re.compile(r"[\s\[(]0*(\d{1,4})\s*[-~～]\s*0*(\d{1,4})\s*(?:END|Fin|fin|全集|完)"),
 )
-_BATCH_HINTS = (
-    "全集", "合集", "季度全集", "batch", "fin", "end", "完", "movie",
-    "剧场版", "劇場版", "oad", "ova 合集",
+
+# 「合集」只认**明确写了打包**的写法。三条踩过的坑（用户实测，2026-10）：
+#   1) 不含 movie / 剧场版：剧场版是**单片**，不是合集。动漫花园的分类也把它标成「動畫」，
+#      不是「季度全集」——以前按标题子串把 [Movie] 当合集，弹窗里 4 条剧场版全被「含合集」藏了。
+#   2) 不含 end / fin：`Show - 12 END` 是**第 12 集（最终话）**。以前按子串判合集，
+#      而自动追番 `_new_candidates` 会跳过 is_batch → **最后一集永远下不到**。
+#   3) 子串匹配会误伤：`Weekend` 命中 end、`Final` 命中 fin。中文词没有词边界问题，
+#      英文词一律加词边界。
+_BATCH_RE = re.compile(
+    r"合集|全集|季度全集"
+    r"|(?<![a-z])(?:batch|complete|all[\s._-]*episodes|season[\s._-]*complete)(?![a-z])",
+    re.I,
 )
+# 剧场版 / 单片：不是合集（单独标成 is_movie，界面显示「剧场版」，不被隐藏也不影响手动下载）
+_MOVIE_RE = re.compile(
+    r"(?<![a-z])(?:the[\s._-]*)?movie(?![a-z])|剧场版|劇場版|剧场动画|劇場動畫",
+    re.I,
+)
+# 「(Part 2: …)」「Pt.3」是分段/小节标记，不是集号（ToonsHub 曾把 Part 2 显示成「第 2 集」）
+_PART_MARK = re.compile(r"(?<![A-Za-z])(?:part|pt)\.?\s*\d{1,3}(?![\d])", re.I)
+# 宽松的集号区间：`01-12`、`S01 | 01-12`、`1-24v2`（Nyaa / 爱恋常写、不带方括号）。
+# 两条必须守住的边界（实测踩到）：
+#   1) **连字符两边不允许空格**：`异世界四重奏3 - 11` 是「番名（带季数）+ 第 11 集」，
+#      允许空格就会被读成「第 3~11 集」→ 正常单集全被标成合集（自动追番直接不下）。
+#   2) 左边那个数字前面不能紧贴字母/数字/汉字：`四重奏3-11`、`x265-10bit`、`1080p-720p` 都不是集号区间。
+_LOOSE_RANGE = re.compile(r"(?<![\w.])(\d{1,3})[-~～](\d{1,3})(?![\d.])")
+# 标题里可能夹着日期（2026-10-22 / 2026.10.22）：`10-22` 不是集号区间，匹配前先抹掉
+_DATE_LIKE = re.compile(r"\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{4}")
+
+
+def looks_like_movie(title: str) -> bool:
+    """标题是不是剧场版/单片（「剧场版」「[Movie]」这类）。"""
+    return bool(title) and bool(_MOVIE_RE.search(str(title)))
+
+
+def category_is_batch(category: str) -> bool:
+    """
+    站点分类是否表示「合集」：动漫花园的分类列会写「季度全集」。
+
+    Nyaa / 爱恋没有这个概念（Nyaa 的分类只有 Anime - English-translated 这类语言/来源），
+    所以它们的合集只能靠标题写没写范围来判断。
+    """
+    cat = str(category or "")
+    return bool(cat) and ("季度全集" in cat or "合集" in cat)
+
+
+def loose_range(title: str) -> Optional[tuple[int, int]]:
+    """
+    宽松集号区间：`01-12`、`S01 | 01-12`、`1-24v2` 这类不带方括号的写法。
+
+    限制 1 <= 起 < 止 <= 999，并且不允许紧贴数字/小数点，日期先抹掉 —— 这样不会把
+    `1080p`、`2026-10-22`、`AAC2.0-5.1`、`x265-10bit` 当成集号区间。
+    """
+    text = _DATE_LIKE.sub(" ", str(title or ""))
+    for m in _LOOSE_RANGE.finditer(text):
+        try:
+            a, b = int(m.group(1)), int(m.group(2))
+        except (TypeError, ValueError):
+            continue
+        if 1 <= a < b <= 999:
+            return a, b
+    return None
 
 # 季数标记：「Season 2」「第2季」「2nd Season」「S02」（S02E05 里的 S02 不动，那是集号前缀）。
 # 解析集数前先把它们抹成空格，否则「[ANi] Season 2 - 171」会被解析成第 2 集（用户报的 bug：
@@ -132,23 +190,33 @@ def _aniparse_numbers(title: str) -> list[int]:
         return []
 
 
-# 这些数字不是集号：帧率（143.8561fps）、位深（10bit）、编码（x265/H.264/AVC）、音频（AAC2.0）
+# 这些数字不是集号：帧率（143.8561fps）、位深（10bit）、编码（x265/H.264/AVC）、音频（AAC2.0）、
+# 容器格式（MP4/MKV…）—— 容器这一条是踩出来的：aniparse 会把 `[MP4]` 拆成「MP」+ 集号 **4**，
+# 于是一个剧场版标题凭空多出「第 4 集」（可能被自动追番当成新集下载）。
 _NON_EPISODE_NUMBERS = re.compile(
     r"\d+(?:\.\d+)?\s*fps"
     r"|\d+\s*bit"
     r"|[xh]\.?26[45]"
-    r"|\bavc\b|\bhevc\b|\baac\d?(?:\.\d+)?",
+    r"|\bavc\b|\bhevc\b|\baac\d?(?:\.\d+)?"
+    r"|\bmp[34]\b|\bmkv\b|\bavi\b|\bflac\b|\bopus\b",
     re.I)
 
 
 def parse_episode_range(title: str) -> tuple[Optional[int], Optional[int], bool]:
-    """解析标题的剧集范围，返回 (起始, 结束, 是否合集)。无法解析返回 (None, None, is_batch)。"""
+    """
+    解析标题的剧集范围，返回 (起始, 结束, 是否合集)。
+
+    合集判定只看标题里**明确写了打包**的写法（`合集/全集/Batch/Complete` 或集号范围），
+    不再把 `Movie`（单片）和 `END/FIN`（最终话）当合集 —— 详见 `_BATCH_RE` 上面的注释。
+    站点自己的分类（动漫花园「季度全集」）更权威，由 `category_is_batch()` 在 enrich 里叠加。
+    """
     if not title:
         return None, None, False
-    low = title.lower()
-    is_batch = any(h in low for h in _BATCH_HINTS)
+    is_batch = bool(_BATCH_RE.search(title))
     # 先把季数标记抹掉：Season 2 / 第2季 / 2nd Season / S02 里的数字不是集数
     probe = _SEASON_MASK.sub(" ", title)
+    # 「(Part 2: …)」是分段标记，不是集号（ToonsHub 曾把 Part 2 显示成第 2 集）
+    probe = _PART_MARK.sub(" ", probe)
     # 再抹掉「不是集数」的数字：帧率 143.8561fps、10bit、x265、H.264、AAC2.0 之类
     probe = _NON_EPISODE_NUMBERS.sub(" ", probe)
 
@@ -162,6 +230,11 @@ def parse_episode_range(title: str) -> tuple[Optional[int], Optional[int], bool]
             continue
         if 0 <= a <= b <= 2000 and (b - a) >= 1:
             return a, b, True
+
+    # 不带方括号的范围写法（`S01 | 01-12`）：写了范围就是整季打包
+    rng = loose_range(probe)
+    if rng:
+        return rng[0], rng[1], True
 
     # 优先用 aniparse（与参考项目同款解析器）：它能区分 1080p、年份、版本号、季数
     nums = _aniparse_numbers(probe)

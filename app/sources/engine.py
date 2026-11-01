@@ -367,7 +367,7 @@ def filter_outcome(out: SearchOutcome, *, group: str = "", resolution: str = "",
 
 
 def collect_groups(subject: Subject, *, source_ids: Optional[Iterable[str]] = None,
-                   by_source: bool = True) -> dict:
+                   by_source: bool = True, keyword: str = "") -> dict:
     """
     获取字幕组列表。
 
@@ -375,11 +375,13 @@ def collect_groups(subject: Subject, *, source_ids: Optional[Iterable[str]] = No
       返回 {"groups": [{"name": "桜都字幕组", "source": "dmhy", "source_name": "动漫花园",
                         "count": 42, "team_id": "619", "value": "dmhy::桜都字幕组", "key": "..."}]}
     by_source=False：旧行为，跨站合并（同一个组只出现一次，sources 列出所有站点）。
+    keyword：手动搜索关键词（空=按番剧名/别名）。给了就只按这个词搜，
+      保证字幕组候选与资源列表是同一批结果 —— 否则下拉里会混进这个词搜不到的组。
 
     为什么默认要分开：不同站的同名组其实是不同的发布源，合集数量/命名/清晰度都不一样，
     合并成一条会让用户没法指定「只要动漫花园那家的」。
     """
-    outcome = search_by_subject(subject, source_ids=source_ids, group="")
+    outcome = search_by_subject(subject, source_ids=source_ids, group="", keyword=keyword)
 
     if by_source:
         buckets: dict[tuple[str, str], dict] = {}

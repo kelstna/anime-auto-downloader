@@ -169,11 +169,10 @@ class TestResourceHelpers(unittest.TestCase):
         ))
         self.assertEqual(r.infohash, "7bsrirfcycz767r5upf5oxnfr327bhqz")
         self.assertEqual(len(r.infohash), 32)
-        # 实测行为：范围带后缀（01-28+SPx11）时当前版本解析不出范围，
-        # 标记 is_batch=False、episode=None；因为 episode 为空，
-        # watcher._new_candidates 依然不会自动下载它（见 test_group_by_episode_skips_unparsable）。
-        self.assertFalse(r.is_batch)
-        self.assertIsNone(r.episode)
+        # 范围带后缀（01-28+SPx11）：以前的正则要求 `[01-28]` 紧贴方括号，解析不出来（is_batch=False，
+        # 只能靠「episode 为空」挡住自动下载）。现在有宽松范围识别（`loose_range`）→ 正确判成整季合集。
+        self.assertTrue(r.is_batch)
+        self.assertEqual((r.episode, r.episode_end), (28, 28))
 
     def test_enrich_marks_noise(self):
         self.assertTrue(make("[Group] Show PV [1080p]").is_noise)

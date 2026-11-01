@@ -111,7 +111,70 @@ class TestParseEpisodeRange(unittest.TestCase):
         self.assertIsNone(end)
         self.assertTrue(is_batch)
         # 合集标题即使带集数也标记为合集
-        self.assertEqual(util.parse_episode_range("Show 12 END"), (12, 12, True))
+        self.assertEqual(util.parse_episode_range("Show 01-12 END"), (1, 12, True))
+
+    def test_end_is_finale_not_batch(self):
+        """`Show - 12 END` 是**最终话**，不是合集（以前判成合集 → 自动追番永远漏最后一集）。"""
+        self.assertEqual(util.parse_episode_range("Show 12 END"), (12, 12, False))
+        self.assertEqual(util.parse_episode_range("[Group] Anime - 12 END [1080p]"), (12, 12, False))
+        self.assertEqual(util.parse_episode("Show 12 END"), 12)
+
+    def test_word_boundary_batch_words(self):
+        """英文合集词要词边界：Weekend 里的 end、Final 里的 fin 都不算。"""
+        self.assertFalse(util.parse_episode_range("Cool Show Weekend Special - 05 [1080p]")[2])
+        self.assertFalse(util.parse_episode_range("Some Anime Final Season - 12 [1080p]")[2])
+        self.assertTrue(util.parse_episode_range("Show Batch [1080p]")[2])
+        self.assertTrue(util.parse_episode_range("Show Complete [1080p]")[2])
+
+    def test_movie_is_not_batch(self):
+        """剧场版是单片：不算合集（以前按标题里的 movie 判合集，弹窗默认隐藏了整排）。"""
+        title = "[北宇治字幕组] GROTESQQQUE - 夜露死駆★少女 [Movie][WebRip][繁日內嵌]"
+        start, end, is_batch = util.parse_episode_range(title)
+        self.assertFalse(is_batch)
+        self.assertIsNone(start)
+        self.assertTrue(util.looks_like_movie(title))
+        self.assertFalse(util.looks_like_movie("[Group] Anime - 05 [1080p]"))
+
+    def test_part_number_is_not_episode(self):
+        """`(Part 2: …)` 是分段标记，不是第 2 集。"""
+        title = "[ToonsHub] Grotesqqque (2026) (Part 2: YOROSHIKU Girl) 1080p WEB-DL"
+        self.assertEqual(util.parse_episode_range(title), (None, None, False))
+        self.assertIsNone(util.parse_episode(title))
+
+    def test_container_token_is_not_episode(self):
+        """aniparse 会把容器格式 `[MP4]` 拆成「MP」+ 集号 4 —— 容器不是集号。"""
+        self.assertEqual(
+            util.parse_episode_range("[Lilith-Raws] 劇場版 某番 Movie [Baha][1080p][AVC AAC][CHT][MP4]"),
+            (None, None, False))
+        self.assertEqual(util.parse_episode("[Lilith-Raws] 某番 - 11 [1080p][AVC AAC][MP4]"), 11)
+
+    def test_unbracketed_range_is_batch(self):
+        """不带方括号的范围（动漫花园写成 `S01 | 01-12`）也要认成合集。"""
+        self.assertEqual(util.parse_episode_range("[7³ACG] 幻想嘉年华 S01 | 01-12 [简繁字幕]"), (1, 12, True))
+        self.assertEqual(util.parse_episode_range("Show 1-24v2 [1080p]"), (1, 24, True))
+        self.assertIsNone(util.loose_range("2026-10-22"))
+        self.assertIsNone(util.loose_range("AAC2.0-5.1"))
+
+    def test_title_with_season_digit_plus_episode_is_not_range(self):
+        """`异世界四重奏3 - 11` 是「番名带季数 + 第 11 集」，不是「第 3~11 集」。"""
+        self.assertEqual(util.parse_episode_range(
+            "[LoliHouse] 异世界四重奏3 / Isekai Quartet 3 - 11 [WebRip 1080p]"), (11, 11, False))
+        self.assertEqual(util.parse_episode_range("[Group] 四重奏3-11 [1080p]"), (11, 11, False))
+        self.assertEqual(util.parse_episode_range("[Group] Show 1080p-720p test"), (None, None, False))
+
+    def test_category_decides_batch(self):
+        """动漫花园分类「季度全集」是权威口径；Nyaa/爱恋的分类和合集无关。"""
+        from app.sources.base import Resource, enrich
+        quarterly = enrich(Resource(source="dmhy", title="[Group] 某番 [1080p]", category="季度全集"))
+        self.assertTrue(quarterly.is_batch, "分类说季度全集 → 合集")
+        single = enrich(Resource(source="dmhy", title="[Group] 某番 [1080p]", category="動畫"))
+        self.assertFalse(single.is_batch, "分类说動畫 → 不是合集")
+        nyaa = enrich(Resource(source="nyaa", title="[Group] 某番 [1080p]",
+                               category="Anime - English-translated"))
+        self.assertFalse(nyaa.is_batch, "Nyaa 的分类是语言/来源，不是合集")
+        movie = enrich(Resource(source="dmhy", title="[Group] 某番 剧场版 [1080p]", category="動畫"))
+        self.assertTrue(movie.is_movie)
+        self.assertFalse(movie.is_batch, "剧场版即使分类是動畫也不是合集")
 
     def test_resolution_is_not_episode(self):
         self.assertIsNone(util.parse_episode("Show 1080p"))

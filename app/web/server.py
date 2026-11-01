@@ -389,13 +389,15 @@ def _pick_search_cache(subject_id: int, variant: str) -> tuple[Optional[dict], f
     选一份搜索结果缓存，返回 (内容, 年龄秒)。
 
     规则：
-      1. 先挑变体缓存（字幕组 / 语言 / 关键词口径各自独立）
-      2. 变体没有 → 用基础缓存（全量，筛选在读的时候再做，省一次联网）
+      1. 关键词口径（kw=）**只认自己的缓存**，绝不回退基础缓存：
+         用户手动指定了关键词，搜的就是「只按这个词」的一批资源，基础缓存里根本没有它们，
+         拿别名口径的缓存顶替会让「搜索框里的词」形同摆设（用户反馈就是这个）。
+      2. 其余变体（字幕组 / 语言）：变体没有 → 用基础缓存（全量，筛选在读的时候再做，省一次联网）
       3. **「关键词学习签名」变体（lk=）和基础缓存是同一批资源的两种排序**，预热只刷新基础那份，
          所以这两者取更新的一份 —— 否则弹窗会一直停在几天前的缓存（用户报过「预热完还是过期」）
     """
     cached, age = warmup.search_any_age(subject_id, variant)
-    if not variant:
+    if not variant or "kw=" in variant:
         return cached, age
     base, base_age = warmup.search_any_age(subject_id, "")
     if cached is None:
@@ -584,17 +586,22 @@ def api_search(q, body):
 
 @route("POST", r"/api/groups")
 def api_groups(q, body):
-    """获取番剧的字幕组列表（默认按资源站分开，前端下拉用 optgroup 分组展示）。"""
+    """获取番剧的字幕组列表（默认按资源站分开，前端下拉用 optgroup 分组展示）。
+
+    keyword：手动搜索关键词。给了就只按这个词搜（与资源列表同一批结果），
+    否则下拉里会出现「这个词根本搜不到」的字幕组（用户选了就永远没资源）。
+    """
     body = body or {}
     subject_id = _int(body.get("subject_id"))
     if not subject_id:
         raise ApiError("缺少 subject_id")
     token = config.bangumi_token()
     by_source = _bool(body.get("by_source"), True)
+    keyword = (body.get("keyword") or "").strip()
     try:
         subject = bangumi.get_subject(subject_id, token=token or None)
         result = engine.collect_groups(subject, source_ids=body.get("source_ids") or None,
-                                       by_source=by_source)
+                                       by_source=by_source, keyword=keyword)
     except (http.HttpError, OSError, ValueError) as e:
         raise ApiError(f"获取字幕组失败：{e}", 502) from None
     return {"ok": True, **result}
@@ -895,13 +902,29 @@ def api_sub_del(q, body, sid):
 
 @route("GET", r"/api/groups/cached")
 def api_groups_cached(q, body):
-    """字幕组候选（只读缓存，不联网）：把所有订阅的预热搜索结果里的组按站点汇总。
+    """字幕组候选（只读缓存，不联网）：把它预热搜索结果里的组按站点汇总。
 
-    批量订阅设置用它给「字幕组」下拉填选项 —— 打开就秒出，不会像逐部搜索那样卡半天。
+    `data/cache/search_<番剧id>.json` 是预热写的那份全量搜索结果，每条资源都带
+    `source` + `group`，所以候选直接从这份缓存算，**不依赖「有没有订阅」**。
+
+    踩过的坑：以前只读「已订阅番剧」的缓存，用户把订阅清空后，批量订阅的字幕组下拉
+    就只剩「不限字幕组」—— 明明 34 部番都预热过了，却一个组都选不了。
+
+    query:
+      subject_ids  逗号分隔的番剧 id；批量订阅打开时传「当前勾选那几部」，
+                   候选就只来自这几部（顺带排除已不在「在看」里的历史缓存）。
+                   不传时退回旧口径：订阅里已有番剧的缓存。两者取并集。
     """
+    raw = str((q.get("subject_ids") or [""])[0] if q else "")
+    wanted = [_int(part.strip()) for part in raw.replace("，", ",").split(",")]
+    sids: list[int] = []
+    for sid in [s.subject_id for s in subs.all_subs()] + [x for x in wanted if x]:
+        if sid not in sids:
+            sids.append(sid)
+
     buckets: dict[str, dict] = {}
-    for sub in subs.all_subs():
-        cached, _age = warmup.search_any_age(sub.subject_id, "")
+    for sid in sids:
+        cached, _age = warmup.search_any_age(sid, "")
         if cached is None:
             continue
         for it in normalize_items(cached.get("items")):

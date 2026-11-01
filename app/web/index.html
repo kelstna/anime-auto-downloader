@@ -278,11 +278,13 @@
 
     <!-- 资源列表 -->
     <div class="tab-body" id="tab-res">
-      <!-- 手动搜索：自动搜索搜不到、或想指定某条资源时自己给关键词；加订阅时会把词记住，之后自动追新也用它 -->
+      <!-- 手动搜索：这里的词就是「联网搜索用哪个关键词」的唯一来源。
+           留空 = 按番剧名/别名搜；点「手动搜索」或用回车 = 用这里的词联网重搜（也是联网刷新入口）。
+           加入订阅会把词记住，之后自动追新也只用它。 -->
       <div class="manual-search">
-        <input id="f-keyword" placeholder="手动搜索关键词，回车即搜（可带字幕组名，如「ANi 药屋少女的呢喃」）">
-        <button type="button" class="btn" id="btn-keyword-search">手动搜索</button>
-        <button type="button" class="btn btn-sm" id="btn-keyword-reset" hidden>恢复自动搜索</button>
+        <input id="f-keyword" placeholder="搜索关键词：留空＝按番剧名/别名联网搜索（可带字幕组名，如「ANi 药屋少女的呢喃」）">
+        <button type="button" class="btn" id="btn-keyword-search" title="用搜索框里的关键词联网搜索（留空＝按番剧名/别名）">手动搜索</button>
+        <button type="button" class="btn btn-sm" id="btn-keyword-reset" hidden title="清空关键词，按番剧名/别名联网重搜">恢复自动搜索</button>
       </div>
       <div class="filters">
         <label class="filter"><span>资源站</span>
@@ -312,8 +314,8 @@
           </select></label>
         <label class="check" title="关掉后显示所有季度（含上一季）的资源"><input type="checkbox" id="f-season" checked><span>只看本季</span></label>
         <!-- 右侧动作成组：整行换行时也贴右，不会掉到下一行最左边 -->
+        <!-- 联网刷新已并入上方搜索框的「手动搜索」（留空＝按番剧名/别名联网搜索），这里不再单独放按钮 -->
         <div class="filters-actions">
-          <button type="button" class="btn btn-sm" id="btn-research">重新搜索</button>
           <!-- 筛选完可直接订阅：优先用表里点选的那条资源；没点选则用「订阅设置」里选的集数 -->
           <button type="button" class="btn btn-primary" id="btn-sub-add-res">加入订阅</button>
         </div>
@@ -432,8 +434,8 @@
         </div>
         <div class="form-cell">
           <label for="s-keyword">自定义搜索词</label>
-          <input id="s-keyword" placeholder="留空 = 按番剧名/别名自动搜索">
-          <span class="field-tip" id="s-keyword-tip">留空＝按番剧名/别名搜索；手动搜索的词会自动填进来</span>
+          <input id="s-keyword" placeholder="留空 = 按番剧名/别名搜索">
+          <span class="field-tip" id="s-keyword-tip">留空＝按番剧名/别名搜索；在资源列表上方的搜索框点「手动搜索」会自动填进来</span>
         </div>
         <div class="form-cell span-2">
           <label for="s-folder">下载目录</label>
@@ -503,6 +505,8 @@
       </div>
       <div class="updates-body">
         <div id="batch-rules" class="batch-rules"></div>
+        <!-- 字幕组候选为空时的说明（勾选的番还没预热过就别让用户猜） -->
+        <p class="muted small batch-group-hint" id="batch-group-hint" hidden></p>
         <div class="panel-actions">
           <button type="button" class="btn btn-sm" id="batch-add-rule">添加订阅规则</button>
           <span class="muted small" id="batch-hint">优先级从上到下；合集不会自动下载，只会下最新一集，之后自动追新</span>
