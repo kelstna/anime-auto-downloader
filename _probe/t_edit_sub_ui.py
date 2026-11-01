@@ -234,6 +234,16 @@ def main() -> int:
         check("字幕组配上了站点 kisssub（sub_group）",
               str(body.get("sub_group") or "") == "kisssub::爱恋字幕社", body.get("sub_group"))
 
+        # 截图：保存后 toast 里写的是刚改的组（给人工看「保存生效了」）
+        toast_text = ev(ws, "(() => { const t = document.getElementById('toasts');"
+                            " return t ? t.innerText.replace(/\\n/g, ' | ') : ''; })()") or ""
+        check("toast 里写的是刚改的「爱恋字幕社」", "爱恋字幕社" in toast_text, toast_text[:120])
+        shot_saved = os.path.join(SHOTS, "61_edit_saved.png")
+        r = ws.call("Page.captureScreenshot", {"format": "png"}, timeout=90)
+        with open(shot_saved, "wb") as f:
+            f.write(base64.b64decode(r["data"]))
+        print(f"  截图 -> {shot_saved}")
+
         # ---- ⑧ 什么都没改时点保存：不能把订阅洗掉 ----
         print("\n【8】什么都没改就直接点保存：订阅的值原样保留")
         ev(ws, "document.getElementById('m-close').click()")
