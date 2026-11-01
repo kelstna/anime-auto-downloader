@@ -1292,6 +1292,30 @@ html .card-badges .badge-cache { background: rgba(20, 18, 15, .74); color: #f4ef
 .sub-preview > * { display: inline-flex; align-items: center; gap: 4px; }
 .sub-preview b { color: var(--text); font-weight: 600; }
 .sub-preview .ellipsis { max-width: 40ch; }
+
+/* ---------- 订阅设置：「筛选结果」(只展示不操作) ---------- */
+/* 整页滚动：.tab-body 本来就有 overflow:auto，但它是 flex 子项，默认 min-height:auto
+   不肯缩，内容一高就顶出去而不是内部滚动 —— 这两条是滚动能成立的前提。 */
+#tab-sub { flex: 1 1 auto; min-height: 0; }
+.sub-results { margin-top: var(--sp-4); }
+.sub-results-head {
+  display: flex; align-items: center; gap: var(--sp-2) var(--sp-3); flex-wrap: wrap;
+  margin-bottom: var(--sp-2); font-size: var(--fs-meta); color: var(--text-3);
+}
+.sub-results-title { font-weight: 560; color: var(--text-2); }
+.sub-results-head .check { height: 32px; margin: 0; }
+.sub-results-head .muted { font-size: var(--fs-micro); }
+/* 结果表自己限高：表头本来就有 position:sticky，滚的是这张表，页面不会长到没边 */
+.sub-results-wrap { max-height: min(34vh, 320px); }
+.sub-res-row td { cursor: default; }
+/* 操作行放在结果表之后（不在滚动容器里做 sticky）：吸底会浮在结果表上面把它挡住，
+   页面整体滚动、滚到底就能看到「加入订阅 / 保存修改」，行为和以前一致。 */
+#tab-sub .sub-actions {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+}
+
 .inline-state, .token-state { margin-top: var(--sp-2); font-size: var(--fs-meta); min-height: 1px; }
 .section-hint { margin-bottom: var(--sp-3); }
 

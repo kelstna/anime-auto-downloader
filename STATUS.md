@@ -9,17 +9,66 @@
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | **1.2**（README 顶部写的就是这个；tag `v1.2` → `24c8f16`） |
-| 配置 schema | `data/config.json` 里 `"version": 3`（**不是 App 版本**，别混） |
-| 最后一次提交 | 本次会话三笔（按时间）：`861aaf7` 功能修复 → `3259f12` STATUS 补记 → `da09195` 性能修复（**代码就在这三笔里**，之后只可能有 STATUS 补记提交） |
-| 分支 / 远端 | `main` 跟踪 `kelstna/main`（https://github.com/kelstna/anime-auto-downloader），本地 **领先远端 3 个提交**（未 push，用户没要求 push） |
-| 仓库体量 | `main` 上 **7 个提交**（`160e0a3` / `8da6bc6` / `39c2660` / `24c8f16` / `861aaf7` / `3259f12` / `da09195`）；另有**独立**本地分支 `backup-9919` → `9919e74`（2026-10-15，不在 main 的历史里） |
-| 工作区 | ✅ **干净**（2026-11-01 14:02 提交后复核，`git status --short` 无输出） |
-| 服务 | **正在运行**：`pythonw` PID **48796**（`-m app.main --no-browser`，2026-11-01 13:59:52 重启），监听 **`0.0.0.0:7788`**。注意：**进程 cwd 与数据目录都是 `E:\アニメ\anifetch`**，不是本工作区（见「已知问题 8」） |
-| 测试 | `python tests\run_all.py`：**323 例 = 320 通过 + 3 跳过 + 0 失败**，9.5 秒（2026-11-01 14:00 实测） |
+| 版本 | **1.2**（README 顶部写的就是这个；tag `v1.2` → `24c8f16`。本次没发版，仍是 1.2） |
+| 配置 schema | `data/config.json` 里 `"version": 3`（**不是 App 版本**，别混；本次没动配置） |
+| 最后一次提交 | `187bfc1`（上一批 STATUS 补记）；本次会话的代码提交见下面「本次会话」一节 |
+| 分支 / 远端 | `main` 跟踪 `kelstna/main`（https://github.com/kelstna/anime-auto-downloader），本地 **领先远端 5 个提交**（含本次，未 push，用户没要求 push） |
+| 仓库体量 | `main` 上 **9 个提交**；另有**独立**本地分支 `backup-9919` → `9919e74`（2026-10-15，不在 main 的历史里） |
+| 工作区 | ✅ **干净**（2026-11-01 14:4x 提交后复核） |
+| 服务 | **正在运行**：`pythonw` PID **16212**（`-m app.main --no-browser`，启动于 2026-11-01 14:03），监听 **`0.0.0.0:7788`**，实测 `GET /app.js` 200。**进程 cwd 与数据目录都是 `E:\アニメ\anifetch`**，不是本工作区（见「已知问题 8」） |
+| 测试 | `python tests\run_all.py`：**325 例 = 322 通过 + 3 跳过 + 0 失败**，7.7 秒（2026-11-01 14:37 实测） |
 | 产物 | 无（本地服务，没有 APK/安装包；「发布」= 推送仓库，用户自己 `git pull` 或复制目录） |
 
-## 已提交、等你验收（`861aaf7`）
+## 本次会话：订阅设置「筛选结果」+「修改订阅 = 整套弹窗」
+
+**用户需求（原话要点）**：修改订阅页面下方显示筛选后的搜索结果、页面改成可滚动；
+资源站 / 限定字幕组 / 限定分辨率 / 字幕语言就是筛选条件；含合集给筛选开关；
+修改订阅别再砍成一个精简页，直接用人点卡片的那一整套，默认停在**资源列表**，且
+**弹出的资源列表要按订阅自动筛选**；主按钮改成「保存修改」。
+
+做了什么（**纯前端，后端零改动**，所以不触发铁律 6 的缓存失效）：
+
+1. `index.html`：`#tab-sub` 里 `#s-preview` 与 `.sub-actions` 之间新增 `#sub-results`
+   （标题 + 计数 +「含合集」开关 + 只读结果表 `#sub-res-table`/`#sub-res-body` + 空态）。
+2. `app.js`：
+   - 新增 `subResFilters()` / `filterSubResources()` / `subResEmptyText()` / `buildSubResRow()` /
+     `renderSubResources()`；口径复用 `groupMatch` / `langMatches` / `sortResourceRows`
+     （顺序同后端：站点 → 字幕组 → 语言 → 分辨率；噪声恒隐藏、合集默认隐藏、上限 300 行）
+   - 总闸挂在 `renderSubPreview()` 尾部 + `switchTab('sub')`，改任一 `#s-*` 都会重算
+   - **补上原本没绑的** `#s-source` / `#s-lang` 的 `change`（以前改这两个下拉界面一动不动）
+   - `edit` 模式：`tabs.hidden = backfill`（两页签都保留）、默认 `switchTab('res')`；
+     `applySubscriptionFilterToFilters()` 在 edit 模式下也跑（用户要的「资源列表按订阅自动筛选」）；
+     `#btn-sub-add-res` 与 `#btn-sub-add` 文案都是「保存修改」，且不再因「没资源」置灰；
+     `addSubscriptionFromResList()` 在 edit 模式下直接保存设置（不带 resource、不带 filters）
+   - `renderBackfillHint()` 一分为二：补下载 / 修改订阅两套文案（同一个提示元素）
+3. `styles.css`：`#tab-sub { flex: 1 1 auto; min-height: 0 }`（**滚动成立的前提**）、
+   `.sub-results*` 区块、`.sub-results-wrap { max-height: min(34vh, 320px) }`、
+   `#tab-sub .sub-actions` 只留分隔线（**不做吸底**：实测吸底会浮在结果表上把它挡住）
+
+涉及文件：
+
+```
+app/web/index.html  app/web/app.js  app/web/styles.css
+_probe/ui_fixture.html（make_fixture.py 重生成，index.html 改了必须重跑）
+_probe/t_sub_results_ui.py（新增：CDP 真浏览器探针，52 项，出 3 张截图）
+_probe/t_sub_results_logic.mjs（新增：Node 抽取真实函数源码跑筛选口径，19 项）
+README.md（§一.3 订阅设置/修改订阅 + 第九节新增「注意 12」）
+ARCHITECTURE.md（§③ 加入订阅 补「修改订阅」流程、§六 前端结构）
+AGENTS.md（「注意 1~11」→「1~12」两处）  STATUS.md
+```
+
+验证记录：
+
+- `python tests\run_all.py` → **全部通过**（322 通过 / 3 跳过 / 0 失败，7.71 秒）
+- `node _probe\t_sub_results_logic.mjs` → **19 项全过**（7 条/2 条/1 条/0 条、站点与组成对、
+  含合集 8 条、空态 total=0 等口径全部对上）
+- `python -X utf8 _probe\t_sub_results_ui.py`（Chrome headless + CDP）→ **52 项全过**，
+  截图 `_probe/shots/50_sub_results.png`（订阅设置）、`51_edit_resources.png`（修改订阅→资源列表已按订阅筛好）、
+  `52_sub_results_scrolled.png`（滚到底能看到结果表 + 保存修改）
+- 已把 3 个前端文件复制到运行中的部署副本 `E:\アニメ\anifetch\app\web\`（逐个 SHA256 比对一致）；
+  静态文件是按请求读盘的，**刷新页面即可生效，不用重启服务**（本次没改后端）
+
+## 上一批（已入库，待你验收）：`861aaf7` + `da09195`
 
 四件事在同一个提交里（1~3 是上一批在途改动，4 是本次修的）：
 
@@ -59,7 +108,23 @@ tests/test_groups_cached.py（新增）  README.md  ARCHITECTURE.md  STATUS.md
 > 测试已全绿；4 还额外做过接口实测：6 部勾选 → 61 个组 / 19 ms，34 部勾选 → 299 个组 / 119 ms。
 > 剩下的是**页面上点一遍**（见下面「待验收」第 8 条）。
 
-## 待验收（这批改动）
+## 待验收
+
+### 本批（订阅设置「筛选结果」+ 修改订阅）
+
+1. 点番剧卡片 → 「订阅设置」：**拉到下半部分**能看到「筛选结果 · 共 N 条」和一张只读表；
+   改 资源站 / 限定字幕组 / 限定分辨率 / 字幕语言 任一条件，表里的条数立刻跟着变。
+2. 勾「含合集」→ 多出合集行（默认不列合集）；计数行会写「已隐藏 N 条合集 / 噪声」。
+3. 整页可上下滚（滚的是订阅设置这一页，结果表自己限高、表头固定在表内）；滚到底能看到
+   「加入订阅 / 去资源列表挑选单集 / 合集」。
+4. 「我的订阅」→ 任意订阅 → **修改订阅**：弹窗**两个页签都在**，默认停在**资源列表**，
+   且**已按这条订阅的字幕组 / 语言 / 分辨率筛好**（顶部提示条写「已按订阅筛选：…（可自行放宽）」）；
+   订阅限定的项这轮没搜到就不锁它，提示条会写明哪一项没过滤。
+5. 两个页签上的主按钮都是**保存修改**；点它 → 提示「订阅已更新」，订阅里的设置被改掉，
+   **不会重新下载**；资源列表行内「下载」是「只给这条订阅补这一集」，不动设置。
+6. 已订阅的番剧点卡片进「订阅设置」，字幕组下拉仍会默认选中订阅里的组（老行为，没动）。
+
+### 上一批（手动搜索 / 合集判定 / 批量订阅字幕组）
 
 1. 弹窗搜索框填词 → 日志/网络里确认**只按这个词**联网搜；留空 → 按番剧名/别名搜。
 2. 点「手动搜索」**必走联网**（不吃缓存），页面上不再有「重新搜索」按钮。
@@ -76,7 +141,7 @@ tests/test_groups_cached.py（新增）  README.md  ARCHITECTURE.md  STATUS.md
 
 1. `ARCHITECTURE.md` 第八节列的 6 条 TODO 都还在（「按当前筛选订阅」没传 `all_seasons`、批量订阅优先级提示、
    `shoot_ui_batch.py`/`cdp_ui.py` 各一条断言基于旧交互、篇章集号字面不一致、`aniparse` 可选、罕见编号重叠）。
-2. **文档里的用例数过期**（2026-11-01 观察：README 写 274、ARCHITECTURE 写 296、实测 323 例）。
+2. **文档里的用例数过期**（2026-11-01 观察：README 写 274、ARCHITECTURE 写 296、实测 325 例）。
    改文档时别再写死数字，统一写「跑 `tests\run_all.py` 看摘要」。
 3. `data/config.example.json` 里有本机用户名 `tsubaki`，`"version"` 还是 1（会被 `_migrate()` 升到 3）；
    开源给别人前值得清一遍。
@@ -90,14 +155,20 @@ tests/test_groups_cached.py（新增）  README.md  ARCHITECTURE.md  STATUS.md
    `E:\アニメ\anifetch\data`）。改完源码的生效步骤是：改 `app/` → 复制改动文件到那边的 `app/` →
    重启（在该目录执行 `stop.bat` / `start.bat`，脚本用 `%~dp0`，别在工作区里 double-click，
    否则会拿工作区那份 `data/` 起服务）。本工作区的 `data/` 是旧副本，别拿它看现状。
-9. **订阅已清空**：`E:\アニメ\anifetch\data\subscriptions.json` = `[]`（2026-11-01 13:16 清空），
-   快照在 `.before-delete-20261101-131621.bak`（102 KB）与 `.before-delete-20261101-131623.bak`（10 KB）。
-   要恢复：先停服务，再把快照覆盖回 `subscriptions.json`。
+9. **订阅已恢复**：`E:\アニメ\anifetch\data\subscriptions.json` 现有 **17 条**（2026-11-01 14:37 复核，
+   40913 字节；13:16 清空时的快照 `.before-delete-20261101-131621.bak` / `-131623.bak` 还在，可回退）。
+10. **DSH 沙箱下跑不了的工具**（本会话实测，2026-11-01）：
+    - 受限模式下 `tempfile.mkdtemp()` 建的目录会被拒绝访问 → `python tests\run_all.py` 会报一堆
+      `PermissionError: …\.json.tmp`。**切到「完全权限」(danger-full-access) 再跑**，即全绿。
+    - 受限模式下 Chrome headless 起不来（弹「Error launching CrashSender.exe」，CDP 连接超时）
+      → `_probe/t_sub_results_ui.py` 等 CDP 探针同样要完全权限才有结果。
+    - 浏览器探针只认 **Google Chrome**（用户明确要求，别换 Edge）。
 
 ## 下次可以做的（候选，等用户挑）
 
-- **收尾在途改动**：按上面「待验收」7 条真机走一遍 → 提交 →（用户要的话）发版：
-  **先把 README 顶部改成 1.3，再打 tag `v1.3`**（顺序反了会出现 tag 1.3 / README 1.2）。
+- **真机验收本批**：按上面「待验收 · 本批」6 条点一遍（**刷新页面即可生效**，前端改动不用重启服务）→
+  （用户要的话）发版：**先把 README 顶部改成 1.3，再打 tag `v1.3`**（顺序反了会出现 tag 1.3 / README 1.2）。
+- 上一批（手动搜索 / 合集判定 / 批量订阅字幕组）的 8 条待验收也还没真机走过，可一并走。
 - 修 ARCHITECTURE 那 6 条 TODO，先挑「按当前筛选订阅没传 `all_seasons`」这条（用户能直接感知）。
 - 文档统一：「测试多少例」改成「跑 `tests\run_all.py` 看摘要」，消灭三处过期数字。
 - 跑一次全量 UI 探针回归（`_probe/shoot_*.py`），把过期断言更新掉。
@@ -148,6 +219,7 @@ python tests\run_all.py
 
 | 日期 | 做了什么 | 提交 |
 | --- | --- | --- |
+| 2026-11-01（晚） | **订阅设置加「筛选结果」+ 修改订阅改成整套弹窗**：订阅设置页下方只读结果表（四个限定条件当筛选条、含合集开关、整页可滚）；「修改订阅」保留两个页签、默认资源列表、并**按订阅自动筛选**；主按钮改「保存修改」；新增 2 个探针（CDP 52 项 + Node 口径 19 项）；前置同步到部署副本（刷新即生效） | 见「本次会话」一节 |
 | 2026-11-01（下午） | **修「批量订阅不显示字幕组」**：候选改从预热缓存 `search_<id>` 汇总（`/api/groups/cached` 新增 `subject_ids`），不再依赖订阅；新增 `tests/test_groups_cached.py`；同步 README/ARCHITECTURE；服务已重启并在接口层验证 | `861aaf7` |
 | 2026-11-01 | 建立这套交接机制：`AGENTS.md` + `STATUS.md` + `新会话开场白.txt`（从"优化本地番剧播放"移植过来）；顺手实测测试与运行状态 | 未提交（本次只新增文档） |
 | 2026-10-26 | 「最近更新」弹窗改成按自动追番的下载记录显示 | `24c8f16`（= tag `v1.2`） |

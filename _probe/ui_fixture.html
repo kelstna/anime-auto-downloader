@@ -457,6 +457,36 @@
 
       <div class="sub-preview" id="s-preview"></div>
 
+      <!-- 筛选结果：把上面四个限定条件（资源站 / 限定字幕组 / 限定分辨率 / 字幕语言）当筛选条，
+           本地筛出「按这些条件会下到什么」，只展示不操作（要下载去「资源列表」页签点行内「下载」）。
+           整页可滚动，这张表自己限高（.sub-results-wrap），底下按钮吸底。 -->
+      <section class="sub-results" id="sub-results">
+        <div class="sub-results-head">
+          <span class="sub-results-title">筛选结果 <span class="muted" id="sub-results-count"></span></span>
+          <label class="check" title="合集不会自动下载；勾上只是让它在结果里也列出来"><input type="checkbox" id="s-batch"><span>含合集</span></label>
+          <span class="muted small" id="sub-results-hint">按上面的资源站 / 字幕组 / 分辨率 / 语言实时筛选；与「资源列表」的筛选互不影响</span>
+        </div>
+        <div class="table-wrap sub-results-wrap">
+          <table class="data-table" id="sub-res-table">
+            <thead>
+              <tr>
+                <!-- 列宽沿用资源列表的 .col-* 规则，两处看起来才像同一张表 -->
+                <th class="col-src">资源站</th>
+                <th class="col-group">字幕组</th>
+                <th class="col-title">标题</th>
+                <th class="col-lang">语言</th>
+                <th class="col-res">分辨率</th>
+                <th class="col-ep num">集数</th>
+                <th class="col-size num">大小</th>
+                <th class="col-time">发布</th>
+              </tr>
+            </thead>
+            <tbody id="sub-res-body"></tbody>
+          </table>
+        </div>
+        <div class="empty small" id="sub-res-empty" hidden></div>
+      </section>
+
       <div class="sub-actions">
         <button type="button" class="btn btn-primary" id="btn-sub-add">加入订阅</button>
         <button type="button" class="btn" id="btn-goto-res">去资源列表挑选单集 / 合集</button>

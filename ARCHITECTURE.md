@@ -135,6 +135,13 @@ Resource 就地改集号。偏移由 `_probe/fix_offsets_bgm.py` 按 Bangumi 章
   → 按 initial_mode 决定是否立刻下载最新一集
 ```
 
+**修改已有订阅**（订阅卡「修改订阅」）走的不是另一套页面，而是**同一个弹窗**：
+`openModal(sub, { mode: 'edit' })` —— 两个页签都保留、默认停在资源列表，并把这条订阅的
+字幕组 / 语言 / 分辨率用 `applySubscriptionFilterToFilters()` 预选到 `#f-*`（与补下载模式共用；
+订阅限定的项在这一轮结果里没有就不锁它，并在提示条里写明）。两个页签上的主按钮都变成
+「保存修改」，都只 `POST /api/subscriptions` 写回设置、不带 resource（不重新下载）；
+资源行的「下载」在 edit 模式下走 `downloadForSubscription()`：只给这条订阅补这一集，不动设置。
+
 ### ④ 自动追番（后台每 5 分钟）
 
 ```
@@ -224,6 +231,13 @@ qB 恢复后自动补下载并累加 `flushed_total`。
   （番剧详情、已下载文件管理、批量订阅设置）
 - `app.js`：状态机 + 渲染 + 事件；关键状态 `state.subjects / state.subs / state.selected /
   state.modal / state.batchRules(存 localStorage)`
+- 番剧详情弹窗的两个页签（点卡片 / 修改订阅 / 补下载三个入口）
+  - **资源列表**：`#f-*` 筛选条 + 资源表，行内「下载 / 复制磁力」；补下载模式下 `#f-*` 会按订阅预选
+  - **订阅设置**：四个限定条件（`#s-source` / `#s-group` / `#s-res` / `#s-lang`）+「将订阅」预览行
+    + **筛选结果 `#sub-results`**（只读表：把上面四个条件当筛选条实时筛 `state.modal.resources`，
+    口径复用 `groupMatch` / `langMatches` / `sortResourceRows`，合集默认不列、勾 `#s-batch` 才列）
+  - 整页滚动靠 `#tab-sub { flex: 1 1 auto; min-height: 0 }`；结果表自己限高（表头 sticky），
+    操作行排在结果表之后 —— **不做吸底**，吸底会浮在结果表上把它挡住
 - `ui.js`：自绘下拉（`.sel`）、主题切换（跟随系统/深色/浅色）、入场动效
 - `styles.css`：暖纸+墨色设计系统，含 1280 / 1180 / 760 / 520 断点与 reduced-motion
 
