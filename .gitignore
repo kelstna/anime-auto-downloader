@@ -1,6 +1,8 @@
 # ---- 运行时数据：绝对不要上传 ----
 # data/ 里有 Bangumi Access Token、qBittorrent 密码、订阅列表、日志、缓存
-data/
+# 唯一例外：样例配置 data/config.example.json 进库（不含真实凭据与个人信息）
+data/*
+!data/config.example.json
 
 # ---- 测试/开发产物 ----
 __pycache__/

@@ -9,7 +9,7 @@ infobox 里的「别名」（例如「凡人修仙传 慕兰之战篇」）。�
 
 用法（**在安装目录里跑**，或指定 --root；读写该目录的 data/）：
     python _probe\\refresh_meta.py
-    python _probe\\refresh_meta.py --root E:\\アニメ\\anifetch
+    python _probe\\refresh_meta.py --root <安装目录>
 
 会先把 data/bangumi_meta.json 备份成 data/bangumi_meta.json.bak-<时间>，
 刷新完对比每个条目的 start_ep / 章节表条数，有丢失会直接列出来。

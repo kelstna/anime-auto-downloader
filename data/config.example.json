@@ -1,0 +1,70 @@
+{
+  "version": 3,
+  "bangumi_token": "",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 7788,
+    "allow_lan": false,
+    "open_browser_on_start": true
+  },
+  "proxy": {
+    "enabled": false,
+    "url": "http://127.0.0.1:7890",
+    "for_bangumi": true,
+    "for_sources": true
+  },
+  "qbittorrent": {
+    "base_url": "http://127.0.0.1:7004",
+    "username": "admin",
+    "password": "",
+    "category": "Bangumi",
+    "tags": "自动追番",
+    "create_subfolder": true,
+    "start_paused": false
+  },
+  "sources": [
+    {
+      "id": "dmhy",
+      "name": "动漫花园",
+      "enabled": true,
+      "base": "https://share.dmhy.org",
+      "priority": 1
+    },
+    {
+      "id": "kisssub",
+      "name": "爱恋动漫",
+      "enabled": true,
+      "base": "https://www.kisssub.org",
+      "priority": 2
+    },
+    {
+      "id": "nyaa",
+      "name": "Nyaa",
+      "enabled": true,
+      "base": "https://nyaa.si",
+      "priority": 3
+    }
+  ],
+  "download": {
+    "root": "D:\\Anime",
+    "folder_mode": "name_cn",
+    "preferred_resolution": "1080p",
+    "min_seeders": 0,
+    "exclude_batch_on_subscribe": true
+  },
+  "subscription": {
+    "enabled": true,
+    "interval_minutes": 30,
+    "initial_mode": "latest",
+    "max_episodes_per_round": 3,
+    "search_group_first": true
+  },
+  "search": {
+    "max_keyword_variants": 4,
+    "per_source_limit": 100,
+    "timeout_seconds": 20
+  },
+  "ui": {
+    "theme": "dark"
+  }
+}
